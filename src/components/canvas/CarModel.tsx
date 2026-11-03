@@ -9,6 +9,7 @@ export const CAR_GLB_PATH = '/car.glb';
 const TARGET_CAR_LENGTH_M = 4.2;
 export const SLOT_GUIDE_PIN_OFFSET_Z = 1.45;
 const SPARK_POOL_SIZE = 28;
+const WHEEL_RADIUS_M = 0.33;
 
 const GHOST_HOLOGRAM_MATERIAL = new THREE.MeshStandardMaterial({
   color: '#38BDF8',
@@ -25,10 +26,14 @@ export interface CarVisualMotionState {
   bodyRollRad: number;
   driftYawRad: number;
   driftIntensity: number;
+  /** Velocidad instantánea lineal (m/s) para giro físico de las 4 ruedas (ω = v / r) */
+  speedMs?: number;
   /** Nivel de freno activo [0, 1] para encender luces de freno traseras */
   brakeIntensity?: number;
   /** Nivel de estrés vertical en la guía [0, 1] para emitir chispas metálicas */
   guideStress?: number;
+  /** Indica si la descarga eléctrica OverVolt 18V está activa */
+  overVoltActive?: boolean;
   isDerailed: boolean;
 }
 
@@ -46,13 +51,32 @@ interface LoadedGLBProps {
   isGhost: boolean;
 }
 
+function hasWheelAncestor(obj: THREE.Object3D, root: THREE.Object3D): boolean {
+  let curr = obj.parent;
+  while (curr && curr !== root) {
+    if (/wheel|tire/i.test(curr.name)) {
+      return true;
+    }
+    curr = curr.parent;
+  }
+  return false;
+}
+
 function LoadedCarGLB({ modelPath, yawOffsetRad, isGhost }: LoadedGLBProps) {
   const { scene } = useGLTF(modelPath);
 
   const normalizedModel = useMemo(() => {
     const cloned = scene.clone(true);
+    const wheelNodes: THREE.Object3D[] = [];
 
     cloned.traverse((child) => {
+      if (
+        /wheel|tire/i.test(child.name) &&
+        !hasWheelAncestor(child, cloned)
+      ) {
+        wheelNodes.push(child);
+      }
+
       if (child instanceof THREE.Mesh) {
         if (isGhost) {
           child.material = GHOST_HOLOGRAM_MATERIAL;
@@ -78,6 +102,7 @@ function LoadedCarGLB({ modelPath, yawOffsetRad, isGhost }: LoadedGLBProps) {
     const uniformScale = TARGET_CAR_LENGTH_M / maxHorizontalSpan;
 
     const wrapper = new THREE.Group();
+    wrapper.name = 'glb-normalized-wrapper';
     orientedGroup.scale.setScalar(uniformScale);
     orientedGroup.updateMatrixWorld(true);
 
@@ -92,6 +117,8 @@ function LoadedCarGLB({ modelPath, yawOffsetRad, isGhost }: LoadedGLBProps) {
     );
 
     wrapper.add(orientedGroup);
+    wrapper.userData.wheels = wheelNodes;
+    wrapper.userData.spinDirection = Math.cos(yawOffsetRad) >= 0 ? 1 : -1;
     return wrapper;
   }, [scene, yawOffsetRad, isGhost]);
 
@@ -177,9 +204,10 @@ class CarGLBErrorBoundary extends Component<
 
 /**
  * Componente 3D del vehículo con:
- * - Normalización automática de escala (4.2 m) y rotación en pasos de 90° (`modelYawOffsetRad`) para modelos `.glb` de la comunidad.
+ * - Normalización automática de escala (4.2 m) y rotación (`modelYawOffsetRad`) para modelos `.glb` oficiales y de la comunidad.
+ * - Rotación física real de las 4 ruedas ($\omega = v / r$) en nodos `wheel*` / `tire*` del `.glb`.
  * - Modo holográfico translúcido (`isGhost`) para el Ghost Car de tu mejor vuelta.
- * - Pivote físico sobre la guía delantera (Z = +1.45 m), luces LED de freno y chispas metálicas 0-GC.
+ * - Pivote físico sobre la guía delantera (Z = +1.45 m), luces LED de freno y chispas metálicas / eléctricas OverVolt 0-GC.
  */
 export function CarModel({
   modelPath = CAR_GLB_PATH,
@@ -190,13 +218,14 @@ export function CarModel({
 }: CarModelProps) {
   const guidePivotRef = useRef<THREE.Group>(null);
   const chassisRollRef = useRef<THREE.Group>(null);
+  const guidePinMeshRef = useRef<THREE.Mesh>(null);
   const leftSkidGlowRef = useRef<THREE.Mesh>(null);
   const rightSkidGlowRef = useRef<THREE.Mesh>(null);
   const leftBrakeLightRef = useRef<THREE.Mesh>(null);
   const rightBrakeLightRef = useRef<THREE.Mesh>(null);
   const sparksPointsRef = useRef<THREE.Points>(null);
 
-  // Pool fijo de partículas para chispas metálicas de la guía (cero asignaciones en useFrame)
+  // Pool fijo de partículas para chispas metálicas/eléctricas de la guía (cero asignaciones en useFrame)
   const sparkPool = useMemo(() => {
     const positions = new Float32Array(SPARK_POOL_SIZE * 3);
     const velocities = new Float32Array(SPARK_POOL_SIZE * 3);
@@ -221,8 +250,10 @@ export function CarModel({
       bodyRollRad,
       driftYawRad,
       driftIntensity,
+      speedMs = 0,
       brakeIntensity = 0,
       guideStress = 0,
+      overVoltActive = false,
       isDerailed: derailed,
     } = motionRef.current;
 
@@ -231,9 +262,47 @@ export function CarModel({
     }
     if (chassisRollRef.current) {
       chassisRollRef.current.rotation.z = bodyRollRad;
+
+      // 0. Giro físico real de las 4 ruedas (ω = v / r)
+      if (!derailed && speedMs > 0.05) {
+        const glbWrapper = chassisRollRef.current.getObjectByName(
+          'glb-normalized-wrapper'
+        );
+        if (glbWrapper) {
+          const wheels = glbWrapper.userData.wheels as
+            | THREE.Object3D[]
+            | undefined;
+          const spinDir = (glbWrapper.userData.spinDirection as number) ?? 1;
+          if (wheels && wheels.length > 0) {
+            const angularStep = (speedMs / WHEEL_RADIUS_M) * dt * spinDir;
+            for (let w = 0; w < wheels.length; w++) {
+              wheels[w].rotation.x += angularStep;
+            }
+          }
+        }
+      }
     }
 
     if (isGhost) return;
+
+    // Guía delantera y color de descarga eléctrica OverVolt
+    if (guidePinMeshRef.current) {
+      const pinMat = guidePinMeshRef.current
+        .material as THREE.MeshStandardMaterial;
+      if (derailed) {
+        pinMat.color.setHex(0xe63946);
+        pinMat.emissive.setHex(0xe63946);
+        pinMat.emissiveIntensity = 0.9;
+      } else if (overVoltActive) {
+        pinMat.color.setHex(0x38bdf8);
+        pinMat.emissive.setHex(0x38bdf8);
+        pinMat.emissiveIntensity = 2.6;
+      } else {
+        pinMat.color.setHex(0xf59e0b);
+        pinMat.emissive.setHex(0x000000);
+        pinMat.emissiveIntensity = 0;
+      }
+    }
 
     // 1. Luces traseras de freno LED
     const isBraking = !derailed && brakeIntensity > 0.1;
@@ -247,10 +316,17 @@ export function CarModel({
       lightMesh.scale.setScalar(isBraking ? 1.18 : 1.0);
     }
 
-    // 2. Brillo térmico bajo neumáticos traseros en derrape
-    const showSkid = !derailed && driftIntensity > 0.05;
-    const glowScaleZ = 0.5 + driftIntensity * 1.9;
-    const glowColorHex = driftIntensity > 0.65 ? 0xe63946 : 0xf59e0b;
+    // 2. Brillo térmico bajo neumáticos traseros en derrape o descarga OverVolt
+    const showSkid =
+      !derailed && (driftIntensity > 0.05 || overVoltActive);
+    const glowScaleZ = overVoltActive
+      ? 1.85
+      : 0.5 + driftIntensity * 1.9;
+    const glowColorHex = overVoltActive
+      ? 0x38bdf8
+      : driftIntensity > 0.65
+        ? 0xe63946
+        : 0xf59e0b;
 
     for (const mesh of [leftSkidGlowRef.current, rightSkidGlowRef.current]) {
       if (!mesh) continue;
@@ -259,12 +335,18 @@ export function CarModel({
         mesh.scale.set(1, 1, glowScaleZ);
         const mat = mesh.material as THREE.MeshBasicMaterial;
         mat.color.setHex(glowColorHex);
-        mat.opacity = Math.min(0.88, 0.25 + driftIntensity * 0.65);
+        mat.opacity = overVoltActive
+          ? 0.78
+          : Math.min(0.88, 0.25 + driftIntensity * 0.65);
       }
     }
 
-    // 3. Chispas metálicas en la guía delantera cuando hay fricción intensa contra el raíl
-    const sparkIntensity = Math.max(guideStress, driftIntensity * 0.85);
+    // 3. Chispas metálicas en la guía delantera cuando hay fricción intensa o OverVolt 18V activo
+    const sparkIntensity = Math.max(
+      guideStress,
+      driftIntensity * 0.85,
+      overVoltActive ? 0.92 : 0
+    );
     if (!derailed && sparkIntensity > 0.42) {
       const spawnCount = sparkIntensity > 0.75 ? 2 : 1;
       for (let s = 0; s < spawnCount; s++) {
@@ -303,6 +385,9 @@ export function CarModel({
 
     if (sparksPointsRef.current) {
       sparksPointsRef.current.visible = anyAlive;
+      const ptsMat = sparksPointsRef.current
+        .material as THREE.PointsMaterial;
+      ptsMat.color.setHex(overVoltActive ? 0x38bdf8 : 0xfbbf24);
       if (anyAlive) {
         const posAttr = sparkPool.geo.getAttribute(
           'position'
@@ -317,7 +402,10 @@ export function CarModel({
       {!isGhost && (
         <>
           {/* Guía delantera en la ranura */}
-          <mesh position={[0, 0.05, SLOT_GUIDE_PIN_OFFSET_Z]}>
+          <mesh
+            ref={guidePinMeshRef}
+            position={[0, 0.05, SLOT_GUIDE_PIN_OFFSET_Z]}
+          >
             <boxGeometry args={[0.14, 0.12, 0.48]} />
             <meshStandardMaterial
               color={isDerailed ? '#E63946' : '#F59E0B'}
@@ -326,7 +414,7 @@ export function CarModel({
             />
           </mesh>
 
-          {/* Partículas de chispas metálicas de la trencilla/guía */}
+          {/* Partículas de chispas metálicas/eléctricas de la trencilla/guía */}
           <points
             ref={sparksPointsRef}
             geometry={sparkPool.geo}
@@ -428,5 +516,9 @@ useGLTF.preload('/cars/sonic-wing.glb');
 useGLTF.preload('/cars/phantom-stream.glb');
 useGLTF.preload('/cars/tokyo-gt-turbo.glb');
 useGLTF.preload('/cars/cyber-formula.glb');
+useGLTF.preload('/cars/kenney-sedan-gt.glb');
+useGLTF.preload('/cars/apex-supercar.glb');
+useGLTF.preload('/cars/kenney-race-truck.glb');
+useGLTF.preload('/cars/kenney-moto-gp.glb');
 
 export default CarModel;

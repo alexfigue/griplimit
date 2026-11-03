@@ -42,7 +42,8 @@ const ARCHETYPES: readonly {
  * e Importador Drag & Drop de coches `.glb` de la comunidad (persistidos en IndexedDB).
  */
 export function GaragePanel() {
-  const [isOpen, setIsOpen] = useState(false);
+  const isOpen = useGarageStore((s) => s.isGarageOpen);
+  const setGarageOpen = useGarageStore((s) => s.setGarageOpen);
   const [activeTab, setActiveTab] = useState<GarageTab>('bodies');
   const [notice, setNotice] = useState<string | null>(null);
   const [selectedArchetype, setSelectedArchetype] =
@@ -167,7 +168,7 @@ export function GaragePanel() {
     <div className="pointer-events-auto relative">
       <button
         type="button"
-        onClick={() => setIsOpen((prev) => !prev)}
+        onClick={() => setGarageOpen(!isOpen)}
         aria-expanded={isOpen}
         className={`flex items-center gap-3 rounded-md border px-3.5 py-2 text-left backdrop-blur-md transition-colors ${
           isOpen
@@ -196,8 +197,8 @@ export function GaragePanel() {
           {/* Barra superior de Economía GP + Modo Sandbox */}
           <div className="mb-2.5 flex items-center justify-between gap-2 rounded-xs border border-slate-800 bg-[#0D1117]/90 px-3 py-2">
             <div>
-              <span className="block text-[10px] text-slate-400">
-                Créditos de Ingeniería (Sin ayuda: ×1.35 GP)
+              <span className="block text-[10px] text-cyan-400 font-mono">
+                🎥 Showroom 360° activo · Sin ayuda: ×1.35 GP
               </span>
               <span className="font-mono text-sm font-bold tabular-nums text-[#F59E0B]">
                 {gpCredits} GP disponibles

@@ -541,12 +541,14 @@ export function PhysicsCar() {
     }
 
     // Puente 0-GC para el emisor de marcas de neumáticos en el asfalto
+    vis.speedMs = sim.speedMs;
     skidEmitterRef.current.carGroup = carGroup;
     skidEmitterRef.current.driftYawRad = vis.driftYawRad;
     skidEmitterRef.current.driftIntensity = vis.driftIntensity;
     skidEmitterRef.current.isDerailed = sim.isDerailed;
 
     const telemetryState = useTelemetryStore.getState();
+    const isGarageOpen = useGarageStore.getState().isGarageOpen;
     soundEngine.updateContinuousFrame({
       speedMs: sim.speedMs,
       maxSpeedMs,
@@ -557,9 +559,37 @@ export function PhysicsCar() {
       soundEnabled: telemetryState.soundEnabled,
     });
 
-    // Cámara dinámica con FOV sensible a la velocidad (50° -> 58.5°) y micro-vibración en derrape
+    // Cámara dinámica: Showroom 360° en Garaje, Chase Cam con FOV sensible a velocidad, o Vista Cenital
     const perspCam = state.camera as THREE.PerspectiveCamera;
-    if (telemetryState.cameraMode === 'chase') {
+    if (isGarageOpen) {
+      const orbitAngle = state.clock.elapsedTime * 0.55;
+      const orbitRadius = 6.2;
+      _desiredCamPos.set(
+        carGroup.position.x + Math.cos(orbitAngle) * orbitRadius,
+        carGroup.position.y + 2.45,
+        carGroup.position.z + Math.sin(orbitAngle) * orbitRadius
+      );
+      _desiredCamLook.set(
+        carGroup.position.x,
+        carGroup.position.y + 0.52,
+        carGroup.position.z
+      );
+
+      state.camera.position.lerp(_desiredCamPos, 1 - Math.exp(-6.5 * dt));
+      state.camera.lookAt(_desiredCamLook);
+
+      if (
+        perspCam.isPerspectiveCamera &&
+        Math.abs(perspCam.fov - 44) > 0.05
+      ) {
+        perspCam.fov = THREE.MathUtils.lerp(
+          perspCam.fov,
+          44,
+          1 - Math.exp(-6 * dt)
+        );
+        perspCam.updateProjectionMatrix();
+      }
+    } else if (telemetryState.cameraMode === 'chase') {
       const u = sim.distanceM / trackLengthM;
       evaluateSplineKinematics(curve, u, _kinematics);
 

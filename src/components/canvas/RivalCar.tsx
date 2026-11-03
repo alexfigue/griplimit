@@ -221,6 +221,7 @@ export function RivalCar() {
     const driftInt = THREE.MathUtils.clamp((gripRatio - 0.85) / 0.42, 0, 0.85);
 
     const vis = rivalMotionRef.current;
+    vis.speedMs = sim.speedMs;
     vis.driftIntensity = driftInt;
     vis.brakeIntensity = mustBrake ? 1 : 0;
     vis.guideStress = gripRatio > 0.92 ? (gripRatio - 0.92) * 3.0 : 0;

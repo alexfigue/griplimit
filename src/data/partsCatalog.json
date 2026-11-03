@@ -8,7 +8,8 @@
       "weight": 14,
       "downforceCoeff": 0.42,
       "aeroSpeedFactor": 1.0,
-      "price": 0
+      "price": 0,
+      "author": "Grip Limit Works"
     },
     {
       "id": "body_sonic_wing",
@@ -18,7 +19,20 @@
       "weight": 17,
       "downforceCoeff": 0.92,
       "aeroSpeedFactor": 0.95,
-      "price": 0
+      "price": 0,
+      "author": "Grip Limit Works"
+    },
+    {
+      "id": "body_kenney_sedan",
+      "name": "Kenney Touring GT",
+      "description": "Turismo deportivo CC0 con alerón de copa y ruedas independientes articuladas. Noble y progresivo.",
+      "modelPath": "/cars/kenney-sedan-gt.glb",
+      "yawOffsetRad": 3.14159265,
+      "weight": 15,
+      "downforceCoeff": 0.62,
+      "aeroSpeedFactor": 1.01,
+      "price": 0,
+      "author": "Kenney.nl (CC0)"
     },
     {
       "id": "body_phantom_stream",
@@ -28,7 +42,20 @@
       "weight": 12,
       "downforceCoeff": 0.2,
       "aeroSpeedFactor": 1.06,
-      "price": 200
+      "price": 200,
+      "author": "Grip Limit Works"
+    },
+    {
+      "id": "body_kenney_moto",
+      "name": "Superbike GP Slot",
+      "description": "Chasis carenado ultraligero de 2 ruedas con horquilla invertida. Aceleración explosiva en salidas.",
+      "modelPath": "/cars/kenney-moto-gp.glb",
+      "yawOffsetRad": 0,
+      "weight": 9,
+      "downforceCoeff": 0.38,
+      "aeroSpeedFactor": 1.05,
+      "price": 240,
+      "author": "Kenney.nl (CC0)"
     },
     {
       "id": "body_tokyo_gtr",
@@ -38,7 +65,32 @@
       "weight": 16,
       "downforceCoeff": 0.68,
       "aeroSpeedFactor": 1.03,
-      "price": 320
+      "price": 320,
+      "author": "Grip Limit Works"
+    },
+    {
+      "id": "body_kenney_truck",
+      "name": "Titan Euro-Truck Racing",
+      "description": "Cabeza tractora de competición. Su masa aplasta el coche contra el carril con tracción brutal en subidas.",
+      "modelPath": "/cars/kenney-race-truck.glb",
+      "yawOffsetRad": 0,
+      "weight": 22,
+      "downforceCoeff": 0.85,
+      "aeroSpeedFactor": 0.96,
+      "price": 360,
+      "author": "Kenney.nl (CC0)"
+    },
+    {
+      "id": "body_apex_supercar",
+      "name": "Apex V10 Stradale",
+      "description": "Superdeportivo carmesí de motor central con difusor y alerón GT. Equilibrio letal entre punta y curva.",
+      "modelPath": "/cars/apex-supercar.glb",
+      "yawOffsetRad": 0,
+      "weight": 13,
+      "downforceCoeff": 0.88,
+      "aeroSpeedFactor": 1.04,
+      "price": 440,
+      "author": "Open Source 3D (CC0)"
     },
     {
       "id": "body_cyber_f1",
@@ -48,7 +100,8 @@
       "weight": 10,
       "downforceCoeff": 1.24,
       "aeroSpeedFactor": 1.01,
-      "price": 550
+      "price": 550,
+      "author": "Grip Limit Works"
     }
   ],
   "engines": [
@@ -92,15 +145,23 @@
     {
       "id": "tir_slick_soft",
       "name": "Slick Blando Competición",
-      "description": "Máximo agarre mecánico de serie en horquillas lentas y cambios de pendiente.",
+      "description": "Máximo agarre mecánico de serie en horquillas lentas y cambios de pendiente en seco.",
       "gripCoefficient": 1.74,
       "weight": 23,
       "price": 0
     },
     {
+      "id": "tir_wet_rain",
+      "name": "Lluvia Extrema Wet-Pro",
+      "description": "Dibujo direccional evacuador de agua: mantiene el 96% de adherencia bajo tormenta o pista mojada.",
+      "gripCoefficient": 1.68,
+      "weight": 18,
+      "price": 260
+    },
+    {
       "id": "tir_foam_gripx",
       "name": "Esponja Tratada Grip-X",
-      "description": "Compuesto microporoso ultraligero de slot profesional. Adherencia lateral extrema sin lastre.",
+      "description": "Compuesto microporoso ultraligero de slot profesional. Adherencia lateral extrema en seco sin lastre.",
       "gripCoefficient": 1.96,
       "weight": 14,
       "price": 380

@@ -115,8 +115,10 @@ export interface GarageStoreState {
   readonly gpCredits: number;
   readonly unlockedPartIds: readonly string[];
   readonly sandboxUnlocked: boolean;
+  readonly isGarageOpen: boolean;
   readonly isHydrated: boolean;
   hydrateGarage: () => Promise<void>;
+  setGarageOpen: (open: boolean) => void;
   addGpCredits: (amount: number) => void;
   toggleSandboxUnlocked: () => void;
   selectOrBuyPart: (category: PartCategory, partId: string) => boolean;

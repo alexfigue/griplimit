@@ -159,7 +159,10 @@ export const useGarageStore = create<GarageStoreState>((set, get) => {
     gpCredits: INITIAL_GP_CREDITS,
     unlockedPartIds: DEFAULT_UNLOCKED_IDS,
     sandboxUnlocked: false,
+    isGarageOpen: false,
     isHydrated: false,
+
+    setGarageOpen: (open: boolean) => set({ isGarageOpen: open }),
 
     hydrateGarage: async () => {
       if (get().isHydrated) return;
