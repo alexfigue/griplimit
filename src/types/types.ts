@@ -1,16 +1,17 @@
 /**
- * Dominio completo v2.0 de Grip Limit:
- * Garaje + Flota CC0 + Showroom 360° + Economía GP + Coches Custom (.glb) +
- * 3 Circuitos + Sectores F1 + Modo Copa 3V + Semáforo F1 + Rebufo + OverVolt 18V + Clima Dinámico.
+ * Dominio completo v3.0 Motorsport Sim de Grip Limit:
+ * - 2 Modos Oficiales: Contrarreloj (Solo + Ghost) y Modo VS IA (Duelo directo con Rival IA).
+ * - Semáforo F1 de 5 Focos + Salida en Parrilla en todos los modos.
+ * - Transmisión Secuencial de 6 Velocidades + Tacómetro RPM + 7 Coches Pro de 100k+ vértices desbloqueados al 100%.
  */
 
 export type TrackId = 'montmelo' | 'sierra-seca' | 'neo-wangan';
 export type LaneId = 'left' | 'right';
-export type CameraMode = 'chase' | 'overhead';
+export type CameraMode = 'chase' | 'cockpit' | 'overhead';
 export type EnvironmentStyle = 'realistic' | 'tabletop';
 export type WeatherMode = 'dry' | 'rain';
-export type RaceMode = 'free' | 'cup';
-export type CupStartPhase = 'idle' | 'countdown' | 'green' | 'finished';
+export type RaceMode = 'time-trial' | 'vs-ai';
+export type CupStartPhase = 'countdown' | 'green' | 'racing' | 'finished';
 export type BrakeAdviceLevel = 'clear' | 'coast' | 'brake';
 export type SectorColor = 'pending' | 'purple' | 'green' | 'amber';
 export type LapMedalGrade = 'perfect' | 'drift-master' | 'clean' | 'completed';
@@ -54,11 +55,8 @@ export interface BodyShellPart {
   readonly downforceCoeff: number;
   readonly aeroSpeedFactor: number;
   readonly price?: number;
-  /** Rotación local en eje Y (rad) para alinear modelos .glb importados de la comunidad */
   readonly yawOffsetRad?: number;
-  /** Marca si fue subido por el usuario mediante Drag & Drop (IndexedDB) */
   readonly isCustom?: boolean;
-  /** Autor o atribución opcional CC-BY / Comunidad */
   readonly author?: string;
 }
 
@@ -159,6 +157,9 @@ export interface LapEvaluationSummary {
 export interface TelemetrySnapshot {
   readonly speedMs: number;
   readonly speedKmh: number;
+  readonly gear: number;
+  readonly engineRpm: number;
+  readonly lateralG: number;
   readonly centrifugalForce: number;
   readonly gripAvailable: number;
   readonly gripUsageRatio: number;
@@ -230,6 +231,7 @@ export interface TelemetryStoreState extends TelemetrySnapshot {
   }) => LapEvaluationSummary;
   bumpGhostVersion: () => void;
   setTrackId: (trackId: TrackId) => void;
+  setRaceMode: (mode: RaceMode) => void;
   startCupRace: () => void;
   exitCupRace: () => void;
   setCupCountdownState: (

@@ -2,13 +2,53 @@
 
 import React, { useLayoutEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Sky } from '@react-three/drei';
+import { Environment, Lightformer, Sky } from '@react-three/drei';
 import * as THREE from 'three';
 import { getTrackLUT, type TrackLUT } from '@/lib/montmeloSpline';
 import { useTelemetryStore } from '@/store/store';
 import type { TrackId } from '@/types/types';
 
 const RAIN_DROP_COUNT = 950;
+
+/**
+ * Mapa de entorno HDRI procedural 100% offline para reflejos PBR reales sobre la pintura Clearcoat y cristales.
+ */
+function AutomotivePBRReflections({ isNight = false }: { isNight?: boolean }) {
+  return (
+    <Environment resolution={256} frames={1}>
+      <group rotation={[-Math.PI / 4, 0, 0]}>
+        <Lightformer
+          intensity={isNight ? 2.5 : 3.4}
+          rotation-x={Math.PI / 2}
+          position={[0, 8, -4]}
+          scale={[18, 12, 1]}
+          color={isNight ? '#38BDF8' : '#FFFDF8'}
+        />
+        <Lightformer
+          intensity={isNight ? 1.8 : 2.1}
+          rotation-y={Math.PI / 2}
+          position={[-10, 3, 0]}
+          scale={[24, 4, 1]}
+          color={isNight ? '#F472B6' : '#BAE6FD'}
+        />
+        <Lightformer
+          intensity={isNight ? 1.8 : 2.0}
+          rotation-y={-Math.PI / 2}
+          position={[10, 3, 0]}
+          scale={[24, 4, 1]}
+          color={isNight ? '#06B6D4' : '#FDE68A'}
+        />
+        <Lightformer
+          intensity={0.9}
+          rotation-x={-Math.PI / 2}
+          position={[0, -6, 0]}
+          scale={[28, 28, 1]}
+          color="#1E293B"
+        />
+      </group>
+    </Environment>
+  );
+}
 
 /**
  * Cortina 3D de lluvia dinámica 0-GC (LineSegments pre-alojados en memoria).
@@ -663,6 +703,7 @@ export function EnvironmentScenery() {
   if (environmentStyle === 'tabletop') {
     return (
       <>
+        <AutomotivePBRReflections isNight={false} />
         <color attach="background" args={['#17110C']} />
         <fog attach="fog" args={['#17110C', 185, 460]} />
         <hemisphereLight args={['#FFE4C4', '#2B1D12', 0.85]} />
@@ -689,6 +730,7 @@ export function EnvironmentScenery() {
   if (trackId === 'neo-wangan') {
     return (
       <>
+        <AutomotivePBRReflections isNight />
         <color attach="background" args={['#050811']} />
         <fog attach="fog" args={['#070C1A', isRain ? 115 : 155, isRain ? 360 : 450]} />
 
@@ -732,6 +774,7 @@ export function EnvironmentScenery() {
 
   return (
     <>
+      <AutomotivePBRReflections isNight={false} />
       <color
         attach="background"
         args={[isRain ? '#263445' : isSierra ? '#D99B66' : '#8CB8DE']}

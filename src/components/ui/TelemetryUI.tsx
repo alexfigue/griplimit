@@ -72,14 +72,17 @@ function getMedalBannerClasses(medal: LapMedalGrade): {
   }
 }
 
+const SHIFT_LIGHT_COUNT = 12;
+
 /**
- * HUD unificado v2.0 de Telemetría, Modo Copa 3V (Semáforo F1 + Jefes IA),
- * Rebufo + Descarga OverVolt 18V [B], Clima Dinámico [V], 3 Circuitos, Sectores F1 y Garaje.
+ * HUD Motorsport v3.0:
+ * - Selector directo de los 2 Modos de Juego: Contrarreloj (Solo) y Modo VS IA (Con coche IA).
+ * - Semáforo F1 de 5 Focos (Rojo 1..5 -> ¡VERDE SALIDA!) siempre funcional.
+ * - Cuadro digital GT3/F1 con Tira LED de RPM, Marcha engranada (N, 1ª–6ª), Fuerzas G y Grip.
  */
 export function TelemetryUI() {
   const trackId = useTelemetryStore((s) => s.trackId);
   const playerLane = useTelemetryStore((s) => s.playerLane);
-  const rivalEnabled = useTelemetryStore((s) => s.rivalEnabled);
   const ghostEnabled = useTelemetryStore((s) => s.ghostEnabled);
   const assistEnabled = useTelemetryStore((s) => s.assistEnabled);
   const soundEnabled = useTelemetryStore((s) => s.soundEnabled);
@@ -92,9 +95,11 @@ export function TelemetryUI() {
   const countdownLights = useTelemetryStore((s) => s.countdownLights);
   const cupTargetLaps = useTelemetryStore((s) => s.cupTargetLaps);
   const cupWinner = useTelemetryStore((s) => s.cupWinner);
-  const cupRewardGp = useTelemetryStore((s) => s.cupRewardGp);
 
   const speedKmh = useTelemetryStore((s) => s.speedKmh);
+  const gear = useTelemetryStore((s) => s.gear);
+  const engineRpm = useTelemetryStore((s) => s.engineRpm);
+  const lateralG = useTelemetryStore((s) => s.lateralG);
   const centrifugalForce = useTelemetryStore((s) => s.centrifugalForce);
   const gripAvailable = useTelemetryStore((s) => s.gripAvailable);
   const gripUsageRatio = useTelemetryStore((s) => s.gripUsageRatio);
@@ -119,20 +124,14 @@ export function TelemetryUI() {
   const brakeInput = useTelemetryStore((s) => s.brakeInput);
 
   const slipstreamActive = useTelemetryStore((s) => s.slipstreamActive);
-  const overVoltCharge = useTelemetryStore((s) => s.overVoltCharge);
-  const overVoltActive = useTelemetryStore((s) => s.overVoltActive);
-  const falseStartPenalty = useTelemetryStore((s) => s.falseStartPenalty);
   const turboStartActive = useTelemetryStore((s) => s.turboStartActive);
   const gapToRivalM = useTelemetryStore((s) => s.gapToRivalM);
   const playerRacePosition = useTelemetryStore((s) => s.playerRacePosition);
 
   const setTrackId = useTelemetryStore((s) => s.setTrackId);
-  const startCupRace = useTelemetryStore((s) => s.startCupRace);
-  const exitCupRace = useTelemetryStore((s) => s.exitCupRace);
-  const triggerOverVolt = useTelemetryStore((s) => s.triggerOverVolt);
+  const setRaceMode = useTelemetryStore((s) => s.setRaceMode);
   const toggleWeatherMode = useTelemetryStore((s) => s.toggleWeatherMode);
   const togglePlayerLane = useTelemetryStore((s) => s.togglePlayerLane);
-  const toggleRival = useTelemetryStore((s) => s.toggleRival);
   const toggleGhost = useTelemetryStore((s) => s.toggleGhost);
   const toggleAssist = useTelemetryStore((s) => s.toggleAssist);
   const toggleSound = useTelemetryStore((s) => s.toggleSound);
@@ -143,6 +142,7 @@ export function TelemetryUI() {
   const requestTrackReset = useTelemetryStore((s) => s.requestTrackReset);
 
   const maxSpeedKmh = useGarageStore((s) => s.carStats.MaxSpeed);
+  const maxRpm = useGarageStore((s) => s.carStats.maxRpm);
   const driftCeilingRatio = useGarageStore((s) => s.carStats.DriftCeilingRatio);
   const activeTireId = useGarageStore((s) => s.loadout.tiresId);
 
@@ -166,8 +166,7 @@ export function TelemetryUI() {
 
   const showLapMedalBanner =
     !isDerailed &&
-    cupStartPhase !== 'finished' &&
-    cupStartPhase !== 'countdown' &&
+    cupStartPhase === 'racing' &&
     lastLapSummary !== null &&
     visibleSummaryTs === lastLapSummary.timestamp;
 
@@ -180,10 +179,13 @@ export function TelemetryUI() {
   const nominalGripMarkerLeft = (1.0 / MAX_GAUGE_RATIO) * 100;
 
   const guideStressWidth = Math.min(100, guideStressRatio * 100);
-  const speedBarWidth =
-    maxSpeedKmh > 0 ? Math.min(100, (speedKmh / maxSpeedKmh) * 100) : 0;
-  const overVoltPercent = Math.round(overVoltCharge * 100);
-  const isOverVoltReady = overVoltCharge >= 0.99 && !overVoltActive;
+
+  const rpmFraction =
+    maxRpm > 1800
+      ? Math.max(0, Math.min(1, (engineRpm - 1800) / (maxRpm - 1800)))
+      : 0;
+  const activeShiftLeds = Math.round(rpmFraction * SHIFT_LIGHT_COUNT);
+  const isRedline = rpmFraction >= 0.92;
 
   const gripBarColor =
     isDerailed || gripUsageRatio >= 1.05
@@ -195,10 +197,10 @@ export function TelemetryUI() {
   const gripStatusLabel = isDerailed
     ? 'Fuera de carril'
     : isDrifting
-      ? `Derrape en guía · ${Math.round(driftAngleDeg)}°`
+      ? `Deslizamiento · ${Math.round(driftAngleDeg)}°`
       : gripUsageRatio >= 0.7
-        ? 'Apoyo firme en curva'
-        : 'Tracción limpia';
+        ? 'Apoyo fuerte en curva'
+        : 'Tracción óptima';
 
   const radiusDisplay =
     !Number.isFinite(curvatureRadius) || curvatureRadius > 260
@@ -212,14 +214,53 @@ export function TelemetryUI() {
 
   const gapDisplay = `${gapToRivalM >= 0 ? '+' : ''}${gapToRivalM.toFixed(1)} m`;
 
+  const cameraLabel =
+    cameraMode === 'chase'
+      ? 'Cámara: GT Baja [C]'
+      : cameraMode === 'cockpit'
+        ? 'Cámara: Capó [C]'
+        : 'Cámara: Cenital [C]';
+
   return (
     <div className="pointer-events-none fixed inset-0 z-20 flex flex-col justify-between p-3 sm:p-5 select-none">
-      {/* HEADER UNIFICADO SIN SOLAPAMIENTOS: 3 Circuitos + Modo Copa 3V + Crono + Sectores F1 | Botonera | Garaje */}
+      {/* HEADER UNIFICADO: 2 Modos de Juego (Contrarreloj / Modo VS IA) + 3 Circuitos + Crono | Controles + Garaje */}
       <header className="flex flex-wrap items-start justify-between gap-3">
-        {/* Bloque Izquierdo: Selector de 3 Circuitos + Botón Copa Let's & Go + Cronometraje + Parciales S1/S2/S3 */}
         <div className="pointer-events-auto flex flex-wrap items-center gap-3 rounded-md border border-slate-800 bg-[#151B24]/92 px-3.5 py-2 backdrop-blur-md">
-          <div>
-            <div className="flex flex-wrap items-center gap-1.5">
+          {/* Selector principal de los 2 Modos de Juego */}
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-1.5 rounded-xs border border-slate-700/80 bg-[#0D1117] p-1">
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.unlock();
+                  setRaceMode('time-trial');
+                }}
+                className={`rounded-xs px-3 py-1 font-display text-xs font-bold transition-colors ${
+                  raceMode === 'time-trial'
+                    ? 'bg-[#2F81F7] text-white'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                ⏱️ Contrarreloj
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.unlock();
+                  setRaceMode('vs-ai');
+                }}
+                className={`rounded-xs px-3 py-1 font-display text-xs font-bold transition-colors ${
+                  raceMode === 'vs-ai'
+                    ? 'bg-[#E63946] text-white'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                🏁 Modo VS IA
+              </button>
+            </div>
+
+            {/* Selector de los 3 Circuitos */}
+            <div className="flex flex-wrap items-center gap-1">
               {(Object.keys(CIRCUITS) as TrackId[]).map((id) => {
                 const active = id === trackId;
                 return (
@@ -230,11 +271,9 @@ export function TelemetryUI() {
                       soundEngine.unlock();
                       setTrackId(id);
                     }}
-                    className={`rounded-xs px-2.5 py-1 font-display text-xs font-bold transition-colors ${
+                    className={`rounded-xs px-2 py-0.5 font-display text-[11px] font-bold transition-colors ${
                       active
-                        ? id === 'neo-wangan'
-                          ? 'bg-cyan-600 text-white'
-                          : 'bg-[#2F81F7] text-white'
+                        ? 'bg-slate-200 text-slate-950'
                         : 'bg-[#0D1117]/80 text-slate-400 hover:text-slate-200'
                     }`}
                   >
@@ -242,44 +281,19 @@ export function TelemetryUI() {
                   </button>
                 );
               })}
-
-              <button
-                type="button"
-                onClick={() => {
-                  soundEngine.unlock();
-                  if (raceMode === 'cup') {
-                    exitCupRace();
-                  } else {
-                    startCupRace();
-                  }
-                }}
-                className={`rounded-xs border px-2.5 py-1 font-display text-xs font-bold transition-colors ${
-                  raceMode === 'cup'
-                    ? 'border-[#F59E0B] bg-[#F59E0B] text-slate-950'
-                    : 'border-[#F59E0B]/60 bg-[#F59E0B]/15 text-[#F59E0B] hover:bg-[#F59E0B]/25'
-                }`}
-              >
-                {raceMode === 'cup' ? '🏆 Salir de Copa' : '🏆 Copa 3V vs Jefe'}
-              </button>
             </div>
-            <p className="mt-1 text-[11px] text-slate-400">
-              {raceMode === 'cup' ? (
-                <span className="font-mono text-amber-200">
-                  {boss.cupTitle} · Rival: <strong>{boss.name}</strong>
-                </span>
-              ) : (
-                CIRCUITS[trackId].subtitle
-              )}
-            </p>
           </div>
 
-          <div className="hidden h-10 w-px bg-slate-800 sm:block" />
+          <div className="hidden h-12 w-px bg-slate-800 sm:block" />
 
+          {/* Cronometraje oficial + Posición VS IA + Sectores F1 */}
           <div>
             <div className="flex gap-3.5 font-mono text-xs tabular-nums">
-              {raceMode === 'cup' && (
+              {raceMode === 'vs-ai' && (
                 <div>
-                  <span className="block text-[10px] text-slate-400">Pos.</span>
+                  <span className="block text-[10px] text-slate-400">
+                    Posición
+                  </span>
                   <span
                     className={`text-sm font-bold ${
                       playerRacePosition === 1
@@ -294,7 +308,7 @@ export function TelemetryUI() {
               <div>
                 <span className="block text-[10px] text-slate-400">Vuelta</span>
                 <span className="text-sm font-semibold text-[#F0F4F8]">
-                  {raceMode === 'cup'
+                  {raceMode === 'vs-ai'
                     ? `${Math.min(lapCount, cupTargetLaps)}/${cupTargetLaps}`
                     : lapCount}
                 </span>
@@ -305,10 +319,10 @@ export function TelemetryUI() {
                   {formatLapTime(currentLapTimeMs)}
                 </span>
               </div>
-              {raceMode === 'cup' ? (
+              {raceMode === 'vs-ai' ? (
                 <div>
                   <span className="block text-[10px] text-slate-400">
-                    Gap Jefe
+                    vs {boss.name.split(' · ')[0]}
                   </span>
                   <span
                     className={`text-sm font-bold ${
@@ -331,7 +345,7 @@ export function TelemetryUI() {
                 )
               )}
               <div>
-                <span className="block text-[10px] text-slate-400">Mejor</span>
+                <span className="block text-[10px] text-slate-400">Récord</span>
                 <span className="text-sm font-bold text-[#F59E0B]">
                   {bestLapTimeMs !== null
                     ? formatLapTime(bestLapTimeMs)
@@ -340,7 +354,6 @@ export function TelemetryUI() {
               </div>
             </div>
 
-            {/* Parciales oficiales estilo F1: Morado (Récord), Verde (En ritmo), Ámbar (Lento) */}
             <div className="mt-1.5 flex items-center gap-1.5 font-mono text-[10px] tabular-nums">
               {(['S1', 'S2', 'S3'] as const).map((label, idx) => {
                 const split = currentSectors[idx];
@@ -359,39 +372,57 @@ export function TelemetryUI() {
           </div>
         </div>
 
-        {/* Bloque Derecho Unificado: Controles de Pista + Clima [V] + Ghost Car + Desplegable de Garaje */}
+        {/* Bloque Derecho: Controles de Pista + Salida Semáforo + Garaje Pro */}
         <div className="flex flex-wrap items-center justify-end gap-2">
           <div className="pointer-events-auto flex flex-wrap items-center gap-1.5 rounded-md border border-slate-800 bg-[#151B24]/90 p-1.5 backdrop-blur-md">
             <button
               type="button"
+              onClick={() => {
+                soundEngine.unlock();
+                requestTrackReset();
+              }}
+              title="Volver a la parrilla de salida y activar el Semáforo F1 (o reencarrilar si saliste de pista) [Tecla R]"
+              className="rounded-xs border border-amber-500/60 bg-amber-500/15 px-2.5 py-1.5 text-xs font-bold text-amber-200 transition-colors hover:bg-amber-500/25"
+            >
+              {isDerailed ? 'Reencarrilar [R]' : '🚦 Salida Semáforo [R]'}
+            </button>
+
+            <button
+              type="button"
+              onClick={toggleCameraMode}
+              className="rounded-xs border border-slate-700/70 bg-[#0D1117]/70 px-2.5 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-[#2F81F7]"
+            >
+              {cameraLabel}
+            </button>
+
+            <button
+              type="button"
               onClick={toggleWeatherMode}
-              title="Cambiar entre Asfalto Seco y Tormenta de Lluvia (+20% GP en Lluvia) [Tecla V]"
+              title="Cambiar entre Asfalto Seco y Lluvia [Tecla V]"
               className={`rounded-xs border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                 weatherMode === 'rain'
                   ? 'border-sky-400/80 bg-sky-500/25 text-sky-100'
                   : 'border-slate-700/70 bg-[#0D1117]/70 text-slate-200 hover:border-[#2F81F7]'
               }`}
             >
-              Clima: {weatherMode === 'rain' ? '🌧️ Lluvia' : '☀️ Seco'} [V]
+              {weatherMode === 'rain' ? '🌧️ Lluvia [V]' : '☀️ Seco [V]'}
             </button>
 
             <button
               type="button"
               onClick={toggleAssist}
-              title="Activar o quitar línea predictiva (Sin ayuda ganas ×1.35 GP) [Tecla H]"
               className={`rounded-xs border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                 assistEnabled
                   ? 'border-[#2F81F7]/70 bg-[#2F81F7]/20 text-[#F0F4F8]'
                   : 'border-slate-700/70 bg-[#0D1117]/70 text-slate-400 hover:text-slate-200'
               }`}
             >
-              Ayuda: {assistEnabled ? 'ON' : 'OFF'} [H]
+              Trazada: {assistEnabled ? 'ON' : 'OFF'} [H]
             </button>
 
             <button
               type="button"
               onClick={toggleGhost}
-              title="Mostrar u ocultar el Coche Fantasma de tu mejor vuelta [Tecla G]"
               className={`rounded-xs border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                 ghostEnabled
                   ? 'border-cyan-400/70 bg-cyan-500/20 text-cyan-100'
@@ -404,22 +435,9 @@ export function TelemetryUI() {
             <button
               type="button"
               onClick={togglePlayerLane}
-              title="Cambiar entre carril izquierdo y derecho [Tecla L]"
               className="rounded-xs border border-slate-700/70 bg-[#0D1117]/70 px-2.5 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-[#2F81F7]"
             >
               Carril: {playerLane === 'left' ? 'Izq' : 'Der'} [L]
-            </button>
-
-            <button
-              type="button"
-              onClick={toggleRival}
-              className={`rounded-xs border px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                rivalEnabled
-                  ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-200'
-                  : 'border-slate-700/70 bg-[#0D1117]/70 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              Rival: {rivalEnabled ? 'ON' : 'OFF'}
             </button>
 
             <button
@@ -428,7 +446,6 @@ export function TelemetryUI() {
                 soundEngine.unlock();
                 toggleSound();
               }}
-              title="Silenciar o activar audio del motor [Tecla M]"
               className={`rounded-xs border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                 soundEnabled
                   ? 'border-slate-700/70 bg-[#0D1117]/70 text-slate-200 hover:border-[#2F81F7]'
@@ -441,30 +458,13 @@ export function TelemetryUI() {
             <button
               type="button"
               onClick={toggleEnvironmentStyle}
-              title="Alternar entre paisaje real exterior y modo maqueta de salón [Tecla E]"
               className={`rounded-xs border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                 environmentStyle === 'tabletop'
                   ? 'border-[#F59E0B]/70 bg-[#F59E0B]/20 text-amber-100'
                   : 'border-slate-700/70 bg-[#0D1117]/70 text-slate-200 hover:border-[#2F81F7]'
               }`}
             >
-              Ambiente: {environmentStyle === 'realistic' ? 'Real' : 'Salón'} [E]
-            </button>
-
-            <button
-              type="button"
-              onClick={toggleCameraMode}
-              className="rounded-xs border border-slate-700/70 bg-[#0D1117]/70 px-2.5 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-[#2F81F7]"
-            >
-              {cameraMode === 'chase' ? 'Cenital [C]' : 'Persecución [C]'}
-            </button>
-
-            <button
-              type="button"
-              onClick={requestTrackReset}
-              className="rounded-xs border border-slate-700/70 bg-[#0D1117]/70 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-[#E63946] hover:text-white"
-            >
-              Reencarrilar [R]
+              {environmentStyle === 'realistic' ? 'Circuito [E]' : 'Salón [E]'}
             </button>
           </div>
 
@@ -472,97 +472,95 @@ export function TelemetryUI() {
         </div>
       </header>
 
-      {/* ZONA CENTRAL: Semáforo F1, Resultado Copa 3V, Salida Nula/Turbo, Medalla de Vuelta o Aviso de Frenada */}
+      {/* ZONA CENTRAL: SEMÁFORO OFICIAL F1 (5 Focos Rojos -> ¡VERDE SALIDA!), Final VS IA o Avisos */}
       <div className="mx-auto flex flex-col items-center gap-2">
-        {/* Semáforo de 5 luces rojas estilo F1 en la parrilla de salida */}
-        {raceMode === 'cup' && cupStartPhase === 'countdown' && (
-          <div className="rounded-md border-2 border-slate-700 bg-[#0D1117]/95 px-6 py-4 text-center shadow-2xl backdrop-blur-md">
-            <span className="font-mono text-[11px] font-bold tracking-wider text-amber-300 uppercase">
-              {boss.cupTitle} · Duelo a {cupTargetLaps} Vueltas vs {boss.name}
+        {(cupStartPhase === 'countdown' || cupStartPhase === 'green') && (
+          <div className="rounded-md border-2 border-slate-700 bg-[#0D1117]/95 px-7 py-4 text-center shadow-2xl backdrop-blur-md">
+            <span className="font-mono text-[11px] font-bold tracking-wider text-slate-300 uppercase">
+              {raceMode === 'vs-ai'
+                ? `🏁 MODO VS IA · ${boss.cupTitle} vs ${boss.name}`
+                : `⏱️ CONTRARRELOJ · ${CIRCUITS[trackId].name}`}
             </span>
-            <div className="my-3 flex items-center justify-center gap-3">
+
+            {/* 5 Focos del Semáforo F1 */}
+            <div className="my-3 flex items-center justify-center gap-3.5">
               {([1, 2, 3, 4, 5] as const).map((idx) => {
-                const lit = countdownLights >= idx;
+                const isRedLit =
+                  cupStartPhase === 'countdown' && countdownLights >= idx;
+                const isGreenLit = cupStartPhase === 'green';
                 return (
                   <div
                     key={idx}
-                    className={`h-9 w-9 rounded-full border-2 transition-all ${
-                      lit
-                        ? 'border-red-300 bg-[#FF1E38] shadow-[0_0_20px_#FF1E38]'
-                        : 'border-slate-700 bg-slate-900'
+                    className={`h-10 w-10 rounded-full border-2 transition-all duration-150 ${
+                      isGreenLit
+                        ? 'border-emerald-200 bg-emerald-500 shadow-[0_0_24px_#10B981]'
+                        : isRedLit
+                          ? 'border-red-300 bg-[#FF1E38] shadow-[0_0_22px_#FF1E38]'
+                          : 'border-slate-700 bg-slate-900'
                     }`}
                   />
                 );
               })}
             </div>
-            <p className="font-mono text-xs text-slate-300">
-              No aceleres antes de apagarse las luces · Acelera al apagarse para{' '}
-              <strong className="text-cyan-300">Salida Turbo</strong>
+
+            <p className="font-display text-sm font-bold">
+              {cupStartPhase === 'green' ? (
+                <span className="text-emerald-400">
+                  ¡VERDE! ¡SALIDA LANZADA!
+                  {turboStartActive ? ' · ⚡ LAUNCH CONTROL ACTIVO' : ''}
+                </span>
+              ) : (
+                <span className="text-slate-300">
+                  Parrilla de Salida ({countdownLights}/5) · Mantén{' '}
+                  <strong className="text-white">W / Espacio</strong> para
+                  revolucionar el motor
+                </span>
+              )}
             </p>
           </div>
         )}
 
-        {/* Modal de Final de Carrera de Copa 3V */}
-        {raceMode === 'cup' && cupStartPhase === 'finished' && (
+        {/* Modal de Final de Carrera en Modo VS IA */}
+        {raceMode === 'vs-ai' && cupStartPhase === 'finished' && (
           <div
             className={`pointer-events-auto max-w-md rounded-md border-2 px-6 py-4 text-center shadow-2xl backdrop-blur-md ${
               cupWinner === 'player'
-                ? 'border-[#F59E0B] bg-[#151B24]/97'
+                ? 'border-emerald-400 bg-[#151B24]/97'
                 : 'border-slate-600 bg-[#151B24]/97'
             }`}
           >
             <span
               className={`inline-block rounded-xs px-2.5 py-0.5 font-mono text-xs font-bold ${
                 cupWinner === 'player'
-                  ? 'bg-[#F59E0B] text-slate-950'
+                  ? 'bg-emerald-500 text-slate-950'
                   : 'bg-slate-700 text-slate-200'
               }`}
             >
               {cupWinner === 'player'
-                ? `🏆 ¡CAMPEÓN DE ${boss.cupTitle.toUpperCase()}!`
-                : `2.º PUESTO · ${boss.name} GANA LA COPA`}
+                ? '🏆 ¡VICTORIA EN MODO VS IA!'
+                : '2.ª POSICIÓN FINAL'}
             </span>
             <p className="mt-2 font-display text-xl font-bold text-[#F0F4F8]">
               {cupWinner === 'player'
-                ? `¡Derrotaste a ${boss.name}!`
-                : `${boss.name} cruzó la meta primero`}
-            </p>
-            <p className="mt-1 font-mono text-sm font-bold text-emerald-400">
-              Recompensa de Copa: +{cupRewardGp} GP añadidos al Garaje
+                ? `¡Ganaste el duelo contra ${boss.name}!`
+                : `${boss.name} cruzó la línea de meta primero`}
             </p>
             <div className="mt-3 flex items-center justify-center gap-2.5">
               <button
                 type="button"
-                onClick={startCupRace}
-                className="rounded-xs bg-[#2F81F7] px-3.5 py-1.5 font-display text-xs font-bold text-white hover:bg-blue-500"
+                onClick={() => setRaceMode('vs-ai')}
+                className="rounded-xs bg-[#E63946] px-3.5 py-1.5 font-display text-xs font-bold text-white hover:bg-red-500"
               >
-                Repetir Copa 3V
+                Repetir Carrera VS IA
               </button>
               <button
                 type="button"
-                onClick={exitCupRace}
+                onClick={() => setRaceMode('time-trial')}
                 className="rounded-xs border border-slate-700 bg-[#0D1117] px-3.5 py-1.5 font-display text-xs font-semibold text-slate-300 hover:border-slate-500"
               >
-                Práctica Libre
+                Ir a Contrarreloj
               </button>
             </div>
-          </div>
-        )}
-
-        {/* Avisos instantáneos de Salida Nula o Salida Turbo */}
-        {falseStartPenalty && (
-          <div className="rounded-md border-2 border-[#E63946] bg-[#151B24]/95 px-4 py-2 text-center shadow-lg">
-            <span className="font-display text-sm font-bold text-[#E63946]">
-              ⚠️ ¡SALIDA NULA! Corte de corriente de penalización (1.2 s)
-            </span>
-          </div>
-        )}
-
-        {turboStartActive && !falseStartPenalty && (
-          <div className="rounded-md border-2 border-cyan-400 bg-cyan-950/90 px-4 py-1.5 text-center shadow-lg">
-            <span className="font-display text-sm font-bold text-cyan-200">
-              ⚡ ¡SALIDA PERFECTA TURBO! +28% Empuje Inicial
-            </span>
           </div>
         )}
 
@@ -572,15 +570,15 @@ export function TelemetryUI() {
             className="pointer-events-auto max-w-md rounded-md border-2 border-[#E63946] bg-[#151B24]/95 px-5 py-4 text-center shadow-2xl backdrop-blur-md"
           >
             <p className="font-display text-lg font-bold text-[#E63946]">
-              La guía saltó del carril
+              Pérdida de tracción en el carril
             </p>
             <p className="mt-1 font-mono text-xs tabular-nums text-slate-300">
-              Pico centrífugo: {Math.round(lastDerailForce)} N frente a{' '}
-              {Math.round(gripAvailable)} N disponibles
+              Carga lateral: {Math.round(lastDerailForce)} N ({lateralG} G) vs{' '}
+              {Math.round(gripAvailable)} N de límite de neumático
             </p>
             <p className="mt-2 text-xs text-slate-400">
-              Suelta el acelerador al notar el derrape o equipa rodillos
-              estabilizadores en el garaje.
+              Frena antes del vértice para bajar marchas o monta compuestos más
+              blandos en el Garaje.
             </p>
           </div>
         ) : showLapMedalBanner && lastLapSummary ? (
@@ -590,19 +588,12 @@ export function TelemetryUI() {
               <div
                 className={`max-w-md rounded-md border-2 px-5 py-3 text-center shadow-2xl backdrop-blur-md ${style.border}`}
               >
-                <div className="flex items-center justify-center gap-2">
-                  <span
-                    className={`rounded-xs px-2 py-0.5 font-mono text-[11px] font-bold ${style.badge}`}
-                  >
-                    +{lastLapSummary.earnedCredits} GP
+                {lastLapSummary.isNewBest && (
+                  <span className="inline-block rounded-xs bg-cyan-500/25 px-2 py-0.5 font-mono text-[11px] font-bold text-cyan-200">
+                    NUEVO RÉCORD PERSONAL · FANTASMA ACTUALIZADO
                   </span>
-                  {lastLapSummary.isNewBest && (
-                    <span className="rounded-xs bg-cyan-500/25 px-2 py-0.5 font-mono text-[11px] font-bold text-cyan-200">
-                      NUEVO RÉCORD · FANTASMA ACTUALIZADO
-                    </span>
-                  )}
-                </div>
-                <p className="mt-1.5 font-display text-lg font-bold tracking-wide text-[#F0F4F8]">
+                )}
+                <p className="mt-1 font-display text-lg font-bold tracking-wide text-[#F0F4F8]">
                   {lastLapSummary.title}
                 </p>
                 <p
@@ -621,7 +612,7 @@ export function TelemetryUI() {
         {!isDerailed && assistEnabled && brakeAdvice === 'brake' ? (
           <div className="rounded-md border border-[#E63946] bg-[#E63946]/25 px-4 py-1.5 text-center backdrop-blur-sm">
             <span className="font-display text-sm font-bold text-[#F0F4F8]">
-              Frena ahora
+              Frena y reduce marcha
             </span>
             {recommendedCornerSpeedKmh !== null && (
               <span className="ml-2 font-mono text-xs tabular-nums text-red-200">
@@ -632,7 +623,7 @@ export function TelemetryUI() {
         ) : !isDerailed && assistEnabled && brakeAdvice === 'coast' ? (
           <div className="rounded-md border border-[#F59E0B]/80 bg-[#F59E0B]/18 px-4 py-1.5 text-center backdrop-blur-sm">
             <span className="font-display text-sm font-semibold text-[#F0F4F8]">
-              Templa el gas
+              Modula el gas
             </span>
             {recommendedCornerSpeedKmh !== null && (
               <span className="ml-2 font-mono text-xs tabular-nums text-amber-200">
@@ -643,16 +634,16 @@ export function TelemetryUI() {
         ) : null}
       </div>
 
-      {/* ZONA INFERIOR: Pedales táctiles PWA + Botón OverVolt 18V + Cuadro principal de Telemetría */}
+      {/* ZONA INFERIOR: Pedales táctiles + Cuadro Digital GT3/F1 (Shift Lights LED + Marcha + RPM + Fuerzas G) */}
       <div className="flex flex-col-reverse items-stretch justify-between gap-4 sm:flex-row sm:items-end">
-        <div className="pointer-events-auto flex items-center gap-2.5">
+        <div className="pointer-events-auto flex items-center gap-3">
           <button
             type="button"
             onPointerDown={() => setPointerBrake(true)}
             onPointerUp={() => setPointerBrake(false)}
             onPointerLeave={() => setPointerBrake(false)}
             onPointerCancel={() => setPointerBrake(false)}
-            className={`flex h-20 w-26 flex-col items-center justify-center rounded-md border text-sm font-semibold transition-colors active:scale-[0.98] ${
+            className={`flex h-20 w-28 flex-col items-center justify-center rounded-md border text-sm font-semibold transition-colors active:scale-[0.98] ${
               brakeInput > 0
                 ? 'border-[#E63946] bg-[#E63946]/25 text-white'
                 : 'border-slate-700/90 bg-[#151B24]/90 text-slate-200 hover:border-slate-500'
@@ -670,7 +661,7 @@ export function TelemetryUI() {
             onPointerUp={() => setPointerThrottle(false)}
             onPointerLeave={() => setPointerThrottle(false)}
             onPointerCancel={() => setPointerThrottle(false)}
-            className={`flex h-20 w-34 flex-col items-center justify-center rounded-md border text-sm font-semibold transition-colors active:scale-[0.98] ${
+            className={`flex h-20 w-36 flex-col items-center justify-center rounded-md border text-sm font-semibold transition-colors active:scale-[0.98] ${
               throttleInput > 0.05
                 ? 'border-[#2F81F7] bg-[#2F81F7]/25 text-white'
                 : 'border-slate-700/90 bg-[#151B24]/90 text-slate-200 hover:border-slate-500'
@@ -681,124 +672,120 @@ export function TelemetryUI() {
               W / ↑ / Espacio
             </span>
           </button>
-
-          <button
-            type="button"
-            onClick={triggerOverVolt}
-            disabled={!isOverVoltReady && !overVoltActive}
-            title="Descarga condensador OverVolt 18V (+28% aceleración y +14% punta durante 2.5 s) [Tecla B]"
-            className={`flex h-20 w-28 flex-col items-center justify-center rounded-md border text-xs font-bold transition-all active:scale-[0.98] ${
-              overVoltActive
-                ? 'border-cyan-300 bg-cyan-500/35 text-white shadow-[0_0_20px_rgba(56,189,248,0.45)]'
-                : isOverVoltReady
-                  ? 'border-cyan-400 bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30'
-                  : 'border-slate-800 bg-[#151B24]/75 text-slate-500'
-            }`}
-          >
-            <span className="font-display text-sm">
-              ⚡ {overVoltActive ? '18V ON' : 'OverVolt'}
-            </span>
-            <span className="mt-0.5 font-mono text-[11px] tabular-nums">
-              {overVoltActive ? 'DESCARGA' : `${overVoltPercent}% [B]`}
-            </span>
-          </button>
         </div>
 
+        {/* CUADRO DIGITAL MOTORSPORT GT3 / F1 */}
         <section
           aria-label="Telemetría física en tiempo real"
-          className={`pointer-events-auto w-full sm:w-[465px] rounded-md border bg-[#151B24]/92 p-4 backdrop-blur-md transition-colors ${
+          className={`pointer-events-auto w-full sm:w-[475px] rounded-md border bg-[#151B24]/94 p-4 backdrop-blur-md transition-colors ${
             isDerailed || guideStressRatio > 0.65
               ? 'border-[#E63946]'
-              : overVoltActive
-                ? 'border-cyan-400'
-                : isDrifting
-                  ? 'border-[#F59E0B]/80'
-                  : 'border-slate-800'
+              : isDrifting
+                ? 'border-[#F59E0B]/80'
+                : 'border-slate-800'
           }`}
         >
-          <div className="flex items-baseline justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-400">Velocidad actual</span>
-                {slipstreamActive && (
-                  <span className="rounded-xs bg-cyan-500/20 px-1.5 py-0.5 font-mono text-[10px] font-bold text-cyan-300">
-                    ⚡ REBUFO +12%
-                  </span>
-                )}
-                {weatherMode === 'rain' && (
-                  <span className="rounded-xs bg-sky-500/20 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-sky-300">
-                    {activeTireId === 'tir_wet_rain'
-                      ? '🌧️ Wet-Pro 96%'
-                      : '🌧️ Pista Mojada 78%'}
-                  </span>
-                )}
+          {/* Tira de 12 LEDs de Cambio de Marcha (Shift Lights F1/GT3) */}
+          <div className="mb-3 flex items-center justify-between gap-1.5 rounded-xs border border-slate-800/90 bg-[#0D1117] px-2.5 py-1.5">
+            {Array.from({ length: SHIFT_LIGHT_COUNT }).map((_, i) => {
+              const lit = i < activeShiftLeds;
+              const ledColor = !lit
+                ? 'bg-slate-800/70'
+                : isRedline
+                  ? 'bg-cyan-400 shadow-[0_0_8px_#38BDF8]'
+                  : i < 5
+                    ? 'bg-emerald-400 shadow-[0_0_6px_#10B981]'
+                    : i < 9
+                      ? 'bg-amber-400 shadow-[0_0_6px_#F59E0B]'
+                      : 'bg-[#FF1E38] shadow-[0_0_8px_#FF1E38]';
+              return (
+                <div
+                  key={i}
+                  className={`h-2.5 flex-1 rounded-xs transition-colors duration-75 ${ledColor}`}
+                />
+              );
+            })}
+          </div>
+
+          {/* Indicador de Marcha (N, 1..6) + Velocímetro + Tacómetro RPM + Fuerzas G */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              {/* Caja de Marcha Secuencial */}
+              <div
+                className={`flex h-14 w-13 flex-col items-center justify-center rounded-xs border font-mono ${
+                  isRedline
+                    ? 'border-cyan-400 bg-cyan-500/20 text-cyan-200'
+                    : 'border-slate-700 bg-[#0D1117] text-[#F0F4F8]'
+                }`}
+              >
+                <span className="text-[9px] tracking-wider text-slate-400 uppercase">
+                  Marcha
+                </span>
+                <span className="text-2xl leading-none font-bold">
+                  {gear === 0 ? 'N' : gear}
+                </span>
               </div>
-              <div className="flex items-baseline gap-2">
-                <span className="font-mono text-4xl font-bold tracking-tight tabular-nums text-[#F0F4F8]">
-                  {Math.round(speedKmh)}
-                </span>
-                <span className="font-display text-sm font-medium text-slate-400">
-                  km/h
-                </span>
-                <span className="font-mono text-xs tabular-nums text-slate-500">
-                  / {Math.round(maxSpeedKmh)} máx
-                </span>
+
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs tabular-nums text-slate-300">
+                    {engineRpm.toLocaleString('es-ES')} RPM
+                  </span>
+                  {slipstreamActive && (
+                    <span className="rounded-xs bg-cyan-500/20 px-1.5 py-0.5 font-mono text-[10px] font-bold text-cyan-300">
+                      REBUFO
+                    </span>
+                  )}
+                  {weatherMode === 'rain' && (
+                    <span className="rounded-xs bg-sky-500/20 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-sky-300">
+                      {activeTireId === 'tir_wet_rain'
+                        ? 'Wet-Pro 96%'
+                        : 'Mojado 78%'}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-mono text-4xl font-bold tracking-tight tabular-nums text-[#F0F4F8]">
+                    {Math.round(speedKmh)}
+                  </span>
+                  <span className="font-display text-sm font-medium text-slate-400">
+                    km/h
+                  </span>
+                  <span className="font-mono text-xs tabular-nums text-slate-500">
+                    / {Math.round(maxSpeedKmh)}
+                  </span>
+                </div>
               </div>
             </div>
 
-            <div className="flex gap-4 text-right">
+            <div className="flex gap-3.5 text-right font-mono">
               <div>
-                <span className="block text-xs text-slate-400">Pendiente</span>
+                <span className="block text-[10px] text-slate-400">
+                  Lat. G
+                </span>
                 <span
-                  className={`font-mono text-sm font-semibold tabular-nums ${
-                    slopePercent < -6
-                      ? 'text-[#F59E0B]'
-                      : slopePercent > 6
-                        ? 'text-emerald-400'
-                        : 'text-slate-300'
+                  className={`text-sm font-bold tabular-nums ${
+                    lateralG > 2.2 ? 'text-[#F59E0B]' : 'text-slate-200'
                   }`}
                 >
+                  {lateralG.toFixed(2)} G
+                </span>
+              </div>
+              <div>
+                <span className="block text-[10px] text-slate-400">
+                  Pendiente
+                </span>
+                <span className="text-sm font-semibold tabular-nums text-slate-300">
                   {slopeLabel}
                 </span>
               </div>
               <div>
-                <span className="block text-xs text-slate-400">
-                  Radio carril
-                </span>
-                <span className="font-mono text-sm font-semibold tabular-nums text-slate-200">
+                <span className="block text-[10px] text-slate-400">Radio</span>
+                <span className="text-sm font-semibold tabular-nums text-slate-200">
                   {radiusDisplay}
                 </span>
               </div>
             </div>
-          </div>
-
-          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-xs bg-slate-800/90">
-            <div
-              className={`h-full transition-[width] duration-75 ${
-                overVoltActive ? 'bg-cyan-400' : 'bg-slate-300'
-              }`}
-              style={{ width: `${speedBarWidth}%` }}
-            />
-          </div>
-
-          {/* Barra de carga del Condensador OverVolt 18V (Derrape + Rebufo) */}
-          <div className="mt-2 flex items-center gap-2.5">
-            <span className="shrink-0 font-mono text-[10px] text-cyan-300">
-              Condensador 18V [B]
-            </span>
-            <div className="h-1.5 flex-1 overflow-hidden rounded-xs bg-slate-800/90">
-              <div
-                className={`h-full transition-[width] duration-75 ${
-                  overVoltActive || isOverVoltReady
-                    ? 'bg-cyan-400'
-                    : 'bg-cyan-600/80'
-                }`}
-                style={{ width: `${overVoltActive ? 100 : overVoltPercent}%` }}
-              />
-            </div>
-            <span className="w-10 text-right font-mono text-[10px] tabular-nums text-cyan-200">
-              {overVoltActive ? 'ACTIVO' : `${overVoltPercent}%`}
-            </span>
           </div>
 
           <div className="my-3 h-px bg-slate-800" />
@@ -806,7 +793,7 @@ export function TelemetryUI() {
           <div>
             <div className="flex items-baseline justify-between">
               <span className="text-xs font-medium text-slate-300">
-                Fuerza centrífuga vs. Grip dinámico
+                Carga lateral en neumático vs. Límite de adherencia
               </span>
               <span
                 className={`text-xs font-semibold ${
@@ -833,18 +820,18 @@ export function TelemetryUI() {
               <div
                 className="absolute inset-y-0 w-px bg-[#F59E0B]/70"
                 style={{ left: `${driftStartMarkerLeft}%` }}
-                title="85% Inicio de derrape sobre guía"
+                title="85% Inicio de deslizamiento lateral"
               />
               <div
                 className="absolute inset-y-0 w-0.5 bg-[#E63946]"
                 style={{ left: `${nominalGripMarkerLeft}%` }}
-                title="100% Grip nominal"
+                title="100% Límite nominal de neumático"
               />
             </div>
 
             <div className="mt-2 flex items-center gap-2.5">
               <span className="shrink-0 text-[11px] text-slate-400">
-                Límite de guía
+                Estrés de guía
               </span>
               <div className="h-1.5 flex-1 overflow-hidden rounded-xs bg-slate-800/90">
                 <div
@@ -861,7 +848,7 @@ export function TelemetryUI() {
 
             <div className="mt-2 flex items-center justify-between font-mono text-xs tabular-nums">
               <div>
-                <span className="text-slate-400">Centrífuga: </span>
+                <span className="text-slate-400">Fuerza lateral: </span>
                 <span className="font-semibold text-[#F0F4F8]">
                   {Math.round(centrifugalForce)} N
                 </span>
@@ -871,7 +858,7 @@ export function TelemetryUI() {
               </div>
 
               <div>
-                <span className="text-slate-400">Grip (base+aero): </span>
+                <span className="text-slate-400">Grip (mec+aero): </span>
                 <span className="font-semibold text-[#2F81F7]">
                   {Math.round(gripAvailable)} N
                 </span>

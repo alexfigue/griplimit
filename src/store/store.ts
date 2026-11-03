@@ -9,6 +9,7 @@ import {
 } from '@/lib/customCarStorage';
 import type {
   BodyShellPart,
+  CameraMode,
   CarLoadout,
   CupStartPhase,
   CustomAeroArchetype,
@@ -17,6 +18,7 @@ import type {
   LapMedalGrade,
   PartCategory,
   PartsCatalog,
+  RaceMode,
   SectorColor,
   SectorSplitInfo,
   TelemetrySnapshot,
@@ -26,10 +28,10 @@ import type {
 
 const partsCatalog: PartsCatalog = rawCatalog;
 
-const GARAGE_STORAGE_KEY = 'griplimit_garage_v1';
+const GARAGE_STORAGE_KEY = 'griplimit_garage_v3';
 const RECORDS_STORAGE_KEY = 'griplimit_records_v2';
 const LEGACY_BEST_LAPS_KEY = 'griplimit_best_laps_v1';
-const INITIAL_GP_CREDITS = 250;
+const INITIAL_GP_CREDITS = 9999;
 
 const CUP_VICTORY_PRIZE_BY_TRACK: Record<TrackId, number> = {
   montmelo: 450,
@@ -37,17 +39,17 @@ const CUP_VICTORY_PRIZE_BY_TRACK: Record<TrackId, number> = {
   'neo-wangan': 850,
 };
 
-function computeDefaultUnlockedPartIds(catalog: PartsCatalog): string[] {
-  const freeIds: string[] = [];
-  for (const b of catalog.bodies) if ((b.price ?? 0) <= 0) freeIds.push(b.id);
-  for (const e of catalog.engines) if ((e.price ?? 0) <= 0) freeIds.push(e.id);
-  for (const t of catalog.tires) if ((t.price ?? 0) <= 0) freeIds.push(t.id);
-  for (const r of catalog.rollers) if ((r.price ?? 0) <= 0) freeIds.push(r.id);
-  for (const c of catalog.chassis) if ((c.price ?? 0) <= 0) freeIds.push(c.id);
-  return freeIds;
+function computeAllCatalogPartIds(catalog: PartsCatalog): string[] {
+  const ids: string[] = [];
+  for (const b of catalog.bodies) ids.push(b.id);
+  for (const e of catalog.engines) ids.push(e.id);
+  for (const t of catalog.tires) ids.push(t.id);
+  for (const r of catalog.rollers) ids.push(r.id);
+  for (const c of catalog.chassis) ids.push(c.id);
+  return ids;
 }
 
-const DEFAULT_UNLOCKED_IDS = computeDefaultUnlockedPartIds(partsCatalog);
+const DEFAULT_UNLOCKED_IDS = computeAllCatalogPartIds(partsCatalog);
 
 const initialLoadout: CarLoadout = {
   bodyId: partsCatalog.bodies[0].id,
@@ -101,7 +103,7 @@ function loadPersistedGarage(): PersistedGaragePayload | null {
           ? Math.max(0, Math.round(parsed.gpCredits))
           : INITIAL_GP_CREDITS,
       unlockedPartIds: mergedUnlocked,
-      sandboxUnlocked: Boolean(parsed.sandboxUnlocked),
+      sandboxUnlocked: true,
       loadout: parsed.loadout ?? initialLoadout,
     };
   } catch {
@@ -110,8 +112,7 @@ function loadPersistedGarage(): PersistedGaragePayload | null {
 }
 
 /**
- * STORE 1: GARAJE, ECONOMÍA GP, FLOTA CC0, SHOWROOM 360° Y COCHES CUSTOM (.GLB)
- * Estrictamente aislado de la telemetría física de alta frecuencia.
+ * STORE 1: GARAJE CON ACCESO COMPLETO A TODOS LOS COCHES PRO (.GLB) Y PIEZAS DESDE EL INICIO
  */
 export const useGarageStore = create<GarageStoreState>((set, get) => {
   const persistCurrentGarage = (overrides?: Partial<PersistedGaragePayload>) => {
@@ -120,7 +121,7 @@ export const useGarageStore = create<GarageStoreState>((set, get) => {
       gpCredits: overrides?.gpCredits ?? state.gpCredits,
       unlockedPartIds:
         overrides?.unlockedPartIds ?? [...state.unlockedPartIds],
-      sandboxUnlocked: overrides?.sandboxUnlocked ?? state.sandboxUnlocked,
+      sandboxUnlocked: true,
       loadout: overrides?.loadout ?? state.loadout,
     });
   };
@@ -164,7 +165,7 @@ export const useGarageStore = create<GarageStoreState>((set, get) => {
     carStats: initialCarStats,
     gpCredits: INITIAL_GP_CREDITS,
     unlockedPartIds: DEFAULT_UNLOCKED_IDS,
-    sandboxUnlocked: false,
+    sandboxUnlocked: true,
     isGarageOpen: false,
     isHydrated: false,
 
@@ -200,8 +201,8 @@ export const useGarageStore = create<GarageStoreState>((set, get) => {
       set({
         customBodies: communityCars,
         gpCredits: persisted?.gpCredits ?? INITIAL_GP_CREDITS,
-        unlockedPartIds: persisted?.unlockedPartIds ?? DEFAULT_UNLOCKED_IDS,
-        sandboxUnlocked: persisted?.sandboxUnlocked ?? false,
+        unlockedPartIds: DEFAULT_UNLOCKED_IDS,
+        sandboxUnlocked: true,
         loadout: normalizedLoadout,
         activeParts,
         carStats,
@@ -218,44 +219,11 @@ export const useGarageStore = create<GarageStoreState>((set, get) => {
     },
 
     toggleSandboxUnlocked: () => {
-      const nextSandbox = !get().sandboxUnlocked;
-      set({ sandboxUnlocked: nextSandbox });
-      persistCurrentGarage({ sandboxUnlocked: nextSandbox });
+      set({ sandboxUnlocked: true });
     },
 
     selectOrBuyPart: (category: PartCategory, partId: string) => {
       const state = get();
-      const list =
-        category === 'bodies'
-          ? [...state.catalog.bodies, ...state.customBodies]
-          : state.catalog[category];
-
-      const part = list.find((item) => item.id === partId);
-      if (!part) return false;
-
-      const price = part.price ?? 0;
-      const isCustom = 'isCustom' in part && Boolean(part.isCustom);
-      const isUnlocked =
-        state.sandboxUnlocked ||
-        isCustom ||
-        price <= 0 ||
-        state.unlockedPartIds.includes(partId);
-
-      let nextCredits = state.gpCredits;
-      let nextUnlocked = [...state.unlockedPartIds];
-
-      if (!isUnlocked) {
-        if (state.gpCredits < price) {
-          return false;
-        }
-        nextCredits = state.gpCredits - price;
-        nextUnlocked = [...nextUnlocked, partId];
-        set({
-          gpCredits: nextCredits,
-          unlockedPartIds: nextUnlocked,
-        });
-      }
-
       const nextLoadout: CarLoadout = {
         ...state.loadout,
         ...(category === 'bodies' ? { bodyId: partId } : {}),
@@ -285,8 +253,6 @@ export const useGarageStore = create<GarageStoreState>((set, get) => {
       });
 
       persistCurrentGarage({
-        gpCredits: nextCredits,
-        unlockedPartIds: nextUnlocked,
         loadout: nextLoadout,
       });
       return true;
@@ -459,6 +425,9 @@ function savePersistedRecords(payload: PersistedRecordsPayload): void {
 const INITIAL_TELEMETRY_SNAPSHOT: TelemetrySnapshot = {
   speedMs: 0,
   speedKmh: 0,
+  gear: 0,
+  engineRpm: 1650,
+  lateralG: 0,
   centrifugalForce: 0,
   gripAvailable: initialCarStats.TotalGrip,
   gripUsageRatio: 0,
@@ -479,7 +448,7 @@ const INITIAL_TELEMETRY_SNAPSHOT: TelemetrySnapshot = {
   throttleInput: 0,
   brakeInput: 0,
   slipstreamActive: false,
-  overVoltCharge: 0.45,
+  overVoltCharge: 0.5,
   overVoltActive: false,
   falseStartPenalty: false,
   turboStartActive: false,
@@ -489,7 +458,7 @@ const INITIAL_TELEMETRY_SNAPSHOT: TelemetrySnapshot = {
 };
 
 /**
- * STORE 2: TELEMETRÍA FÍSICA EN TIEMPO REAL, COPA 3V, SEMÁFORO F1, REBUFO, OVERVOLT 18V Y CLIMA
+ * STORE 2: TELEMETRÍA EN TIEMPO REAL, 2 MODOS DE JUEGO (CONTRARRELOJ / VS IA) Y SEMÁFORO F1
  */
 export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
   const ensureRecordsLoaded = (): PersistedRecordsPayload => {
@@ -516,9 +485,9 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
     cameraMode: 'chase',
     environmentStyle: 'realistic',
     weatherMode: 'dry',
-    raceMode: 'free',
-    cupStartPhase: 'idle',
-    countdownLights: 0,
+    raceMode: 'vs-ai',
+    cupStartPhase: 'countdown',
+    countdownLights: 1,
     cupTargetLaps: 3,
     cupWinner: null,
     cupRewardGp: 0,
@@ -632,32 +601,27 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
         (isNewBest || purpleSectorsInLap >= 2 || lapTimeMs <= goldTargetMs)
       ) {
         medal = 'perfect';
-        title = '¡VUELTA PERFECTA!';
-        subtitle = 'Trazada quirúrgica al límite sin forzar la quilla guía';
+        title = '¡VUELTA RÁPIDA DE CLASIFICACIÓN!';
+        subtitle = 'Trazada limpia al límite de adherencia en los 3 sectores';
         baseCredits = 350;
       } else if (derailCount === 0 && driftScoreSec >= 1.8) {
         medal = 'drift-master';
-        title = 'MAESTRO DEL DERRAPE';
-        subtitle = `${driftScoreSec.toFixed(1)} s deslizando la zaga sin saltar del carril`;
+        title = 'CONTROL DE SOBREVIRAJE PRO';
+        subtitle = `${driftScoreSec.toFixed(1)} s al límite de deslizamiento sin perder el carril`;
         baseCredits = 230;
       } else if (derailCount === 0) {
         medal = 'clean';
         title = 'VUELTA LIMPIA';
-        subtitle = 'Cero salidas de carril durante toda la vuelta';
+        subtitle = 'Sin incidencias ni salidas de pista';
         baseCredits = 140;
       } else {
         medal = 'completed';
         title = 'VUELTA COMPLETADA';
-        subtitle = `${derailCount} salida${derailCount === 1 ? '' : 's'} de carril · Modula freno antes del vértice`;
+        subtitle = `${derailCount} salida${derailCount === 1 ? '' : 's'} de pista · Anticipa la frenada antes del vértice`;
         baseCredits = 65;
       }
 
-      const assistMultiplier = state.assistEnabled ? 1.0 : 1.35;
-      const weatherMultiplier = state.weatherMode === 'rain' ? 1.2 : 1.0;
-      const earnedCredits = Math.round(
-        baseCredits * assistMultiplier * weatherMultiplier
-      );
-
+      const earnedCredits = Math.round(baseCredits);
       useGarageStore.getState().addGpCredits(earnedCredits);
 
       const summary: LapEvaluationSummary = {
@@ -691,9 +655,8 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
 
       set((state) => ({
         trackId,
-        raceMode: 'free',
-        cupStartPhase: 'idle',
-        countdownLights: 0,
+        cupStartPhase: 'countdown',
+        countdownLights: 1,
         cupWinner: null,
         cupRewardGp: 0,
         resetNonce: state.resetNonce + 1,
@@ -714,6 +677,9 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
         recommendedCornerSpeedKmh: null,
         speedMs: 0,
         speedKmh: 0,
+        gear: 0,
+        engineRpm: 1650,
+        lateralG: 0,
         centrifugalForce: 0,
         gripUsageRatio: 0,
         slipstreamActive: false,
@@ -723,11 +689,11 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
       }));
     },
 
-    startCupRace: () => {
+    setRaceMode: (mode: RaceMode) => {
       useGarageStore.getState().setGarageOpen(false);
       set((state) => ({
-        raceMode: 'cup',
-        rivalEnabled: true,
+        raceMode: mode,
+        rivalEnabled: mode === 'vs-ai',
         cupStartPhase: 'countdown',
         countdownLights: 1,
         cupWinner: null,
@@ -746,31 +712,25 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
         guideStressRatio: 0,
         speedMs: 0,
         speedKmh: 0,
+        gear: 0,
+        engineRpm: 1650,
+        lateralG: 0,
         centrifugalForce: 0,
         gripUsageRatio: 0,
         slipstreamActive: false,
-        overVoltCharge: 0.5,
         overVoltActive: false,
         falseStartPenalty: false,
         turboStartActive: false,
       }));
     },
 
-    exitCupRace: () =>
-      set((state) => ({
-        raceMode: 'free',
-        cupStartPhase: 'idle',
-        countdownLights: 0,
-        cupWinner: null,
-        cupRewardGp: 0,
-        resetNonce: state.resetNonce + 1,
-        lapCount: 1,
-        rivalLapCount: 1,
-        currentLapTimeMs: 0,
-        currentSectors: EMPTY_SECTOR_SPLITS,
-        speedMs: 0,
-        speedKmh: 0,
-      })),
+    startCupRace: () => {
+      get().setRaceMode('vs-ai');
+    },
+
+    exitCupRace: () => {
+      get().setRaceMode('time-trial');
+    },
 
     setCupCountdownState: (
       phase: CupStartPhase,
@@ -785,12 +745,10 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
       const state = get();
       if (state.cupStartPhase === 'finished') return;
 
-      const basePrize =
+      const reward =
         winner === 'player'
           ? CUP_VICTORY_PRIZE_BY_TRACK[state.trackId]
           : 150;
-      const rainBonus = state.weatherMode === 'rain' ? 1.25 : 1.0;
-      const reward = Math.round(basePrize * rainBonus);
 
       useGarageStore.getState().addGpCredits(reward);
 
@@ -816,10 +774,11 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
         playerLane: state.playerLane === 'left' ? 'right' : 'left',
       })),
 
-    toggleRival: () =>
-      set((state) => ({
-        rivalEnabled: !state.rivalEnabled,
-      })),
+    toggleRival: () => {
+      const nextMode: RaceMode =
+        get().raceMode === 'vs-ai' ? 'time-trial' : 'vs-ai';
+      get().setRaceMode(nextMode);
+    },
 
     toggleGhost: () =>
       set((state) => ({
@@ -837,9 +796,11 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
       })),
 
     toggleCameraMode: () =>
-      set((state) => ({
-        cameraMode: state.cameraMode === 'chase' ? 'overhead' : 'chase',
-      })),
+      set((state) => {
+        const order: CameraMode[] = ['chase', 'cockpit', 'overhead'];
+        const nextIdx = (order.indexOf(state.cameraMode) + 1) % order.length;
+        return { cameraMode: order[nextIdx] };
+      }),
 
     toggleEnvironmentStyle: () =>
       set((state) => ({
@@ -848,18 +809,48 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
       })),
 
     requestTrackReset: () =>
-      set((state) => ({
-        resetNonce: state.resetNonce + 1,
-        isDerailed: false,
-        isDrifting: false,
-        driftAngleDeg: 0,
-        guideStressRatio: 0,
-        brakeAdvice: 'clear',
-        recommendedCornerSpeedKmh: null,
-        speedMs: 0,
-        speedKmh: 0,
-        centrifugalForce: 0,
-        gripUsageRatio: 0,
-      })),
+      set((state) => {
+        // Si el coche está descarrilado, lo reencarrila en marcha; si está en pista, reinicia la Salida en Parrilla con Semáforo F1
+        if (state.isDerailed) {
+          return {
+            resetNonce: state.resetNonce + 1,
+            isDerailed: false,
+            isDrifting: false,
+            driftAngleDeg: 0,
+            guideStressRatio: 0,
+            speedMs: 0,
+            speedKmh: 0,
+            gear: 1,
+            engineRpm: 1800,
+            centrifugalForce: 0,
+            gripUsageRatio: 0,
+          };
+        }
+        return {
+          cupStartPhase: 'countdown',
+          countdownLights: 1,
+          cupWinner: null,
+          resetNonce: state.resetNonce + 1,
+          lapCount: 1,
+          rivalLapCount: 1,
+          currentLapTimeMs: 0,
+          currentSectors: EMPTY_SECTOR_SPLITS,
+          isDerailed: false,
+          isDrifting: false,
+          driftAngleDeg: 0,
+          guideStressRatio: 0,
+          brakeAdvice: 'clear',
+          recommendedCornerSpeedKmh: null,
+          speedMs: 0,
+          speedKmh: 0,
+          gear: 0,
+          engineRpm: 1650,
+          lateralG: 0,
+          centrifugalForce: 0,
+          gripUsageRatio: 0,
+          falseStartPenalty: false,
+          turboStartActive: false,
+        };
+      }),
   };
 });

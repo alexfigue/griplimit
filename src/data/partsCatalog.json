@@ -1,217 +1,222 @@
 {
   "bodies": [
     {
-      "id": "body_aero_saber",
-      "name": "Magnum Aero-Saber",
-      "description": "Carrocería equilibrada azul cobalto. Gran compromiso entre velocidad en recta y apoyo en curva.",
-      "modelPath": "/cars/aero-saber.glb",
-      "weight": 14,
-      "downforceCoeff": 0.42,
-      "aeroSpeedFactor": 1.0,
-      "price": 0,
-      "author": "Grip Limit Works"
-    },
-    {
-      "id": "body_sonic_wing",
-      "name": "Sonic Downforce GT",
-      "description": "Doble alerón trasero de gran carga. Pega el coche al raíl en curvas rápidas y en el Sacacorchos.",
-      "modelPath": "/cars/sonic-wing.glb",
-      "weight": 17,
-      "downforceCoeff": 0.92,
-      "aeroSpeedFactor": 0.95,
-      "price": 0,
-      "author": "Grip Limit Works"
-    },
-    {
-      "id": "body_kenney_sedan",
-      "name": "Kenney Touring GT",
-      "description": "Turismo deportivo CC0 con alerón de copa y ruedas independientes articuladas. Noble y progresivo.",
-      "modelPath": "/cars/kenney-sedan-gt.glb",
-      "yawOffsetRad": 3.14159265,
+      "id": "body_gt3_enduro",
+      "name": "Porsche 911 GT3 RS (Enduro Pro)",
+      "description": "Chasis GT3 de alta carga aerodinámica (105.000 vértices PBR). Equilibrio total en frenada y apoyo en curva rápida.",
+      "modelPath": "/cars/gt3-enduro-pro.glb",
+      "yawOffsetRad": 0,
       "weight": 15,
-      "downforceCoeff": 0.62,
+      "downforceCoeff": 0.95,
       "aeroSpeedFactor": 1.01,
       "price": 0,
-      "author": "Kenney.nl (CC0)"
+      "author": "Pro Motorsport CAD"
     },
     {
-      "id": "body_phantom_stream",
-      "name": "Phantom Streamliner",
-      "description": "Prototipo cola larga de mínima resistencia aerodinámica. Velocidad punta extrema en rectas.",
-      "modelPath": "/cars/phantom-stream.glb",
-      "weight": 12,
-      "downforceCoeff": 0.2,
-      "aeroSpeedFactor": 1.06,
-      "price": 200,
-      "author": "Grip Limit Works"
-    },
-    {
-      "id": "body_kenney_moto",
-      "name": "Superbike GP Slot",
-      "description": "Chasis carenado ultraligero de 2 ruedas con horquilla invertida. Aceleración explosiva en salidas.",
-      "modelPath": "/cars/kenney-moto-gp.glb",
+      "id": "body_lambo_razor",
+      "name": "Lamborghini Huracán GT3 (Razor V10)",
+      "description": "Superdeportivo V10 de motor central con difusor trasero agresivo. Tracción y paso por curva letal.",
+      "modelPath": "/cars/lambo-razor-pro.glb",
       "yawOffsetRad": 0,
-      "weight": 9,
-      "downforceCoeff": 0.38,
-      "aeroSpeedFactor": 1.05,
-      "price": 240,
-      "author": "Kenney.nl (CC0)"
-    },
-    {
-      "id": "body_tokyo_gtr",
-      "name": "Shuto Boxer GT-R",
-      "description": "Leyenda JDM Widebody púrpura medianoche con intercooler frontal. Estable y demoledor en Neo-Wangan.",
-      "modelPath": "/cars/tokyo-gt-turbo.glb",
-      "weight": 16,
-      "downforceCoeff": 0.68,
+      "weight": 15,
+      "downforceCoeff": 0.88,
       "aeroSpeedFactor": 1.03,
-      "price": 320,
-      "author": "Grip Limit Works"
+      "price": 0,
+      "author": "Pro Motorsport CAD"
     },
     {
-      "id": "body_kenney_truck",
-      "name": "Titan Euro-Truck Racing",
-      "description": "Cabeza tractora de competición. Su masa aplasta el coche contra el carril con tracción brutal en subidas.",
-      "modelPath": "/cars/kenney-race-truck.glb",
+      "id": "body_hyper_specter",
+      "name": "McLaren Senna GTR (Specter Hyper)",
+      "description": "Hiperdeportivo de circuito con aerodinámica activa y carrocería de carbono ultraligera.",
+      "modelPath": "/cars/hyper-specter-pro.glb",
       "yawOffsetRad": 0,
-      "weight": 22,
-      "downforceCoeff": 0.85,
-      "aeroSpeedFactor": 0.96,
-      "price": 360,
-      "author": "Kenney.nl (CC0)"
+      "weight": 13,
+      "downforceCoeff": 1.12,
+      "aeroSpeedFactor": 1.04,
+      "price": 0,
+      "author": "Pro Motorsport CAD"
+    },
+    {
+      "id": "body_skyline_kaido",
+      "name": "Nissan Skyline GT-R R34 (Kaido Pro)",
+      "description": "Leyenda japonesa Twin-Turbo (131.000 vértices). Aplomo total a alta velocidad en autopista y curvas largas.",
+      "modelPath": "/cars/skyline-kaido-pro.glb",
+      "yawOffsetRad": 0,
+      "weight": 17,
+      "downforceCoeff": 0.78,
+      "aeroSpeedFactor": 1.05,
+      "price": 0,
+      "author": "Pro Motorsport CAD"
+    },
+    {
+      "id": "body_lemans_apogee",
+      "name": "Ford GT Le Mans (Apogee GTE)",
+      "description": "Prototipo GTE de resistencia con túneles Venturi laterales y mínima resistencia al avance en recta.",
+      "modelPath": "/cars/lemans-apogee-pro.glb",
+      "yawOffsetRad": 0,
+      "weight": 14,
+      "downforceCoeff": 0.84,
+      "aeroSpeedFactor": 1.06,
+      "price": 0,
+      "author": "Pro Motorsport CAD"
+    },
+    {
+      "id": "body_jdm_touge",
+      "name": "Toyota AE86 Trueno (Touge Spec)",
+      "description": "Coupé ligero de batalla corta. Ágil en cambios de dirección, horquillas lentas y bajadas técnicas.",
+      "modelPath": "/cars/jdm-touge-pro.glb",
+      "yawOffsetRad": 0,
+      "weight": 11,
+      "downforceCoeff": 0.52,
+      "aeroSpeedFactor": 0.98,
+      "price": 0,
+      "author": "Pro Motorsport CAD"
+    },
+    {
+      "id": "body_f1_monoposto",
+      "name": "Scuderia F1 Monoposto (Formula Pro)",
+      "description": "Monoplaza de Fórmula 1 con efecto suelo extremo y neumáticos slick anchos. El rey absoluto del paso por curva.",
+      "modelPath": "/cars/f1-monoposto-pro.glb",
+      "yawOffsetRad": 0,
+      "weight": 10,
+      "downforceCoeff": 1.32,
+      "aeroSpeedFactor": 1.04,
+      "price": 0,
+      "author": "Pro Motorsport CAD"
     },
     {
       "id": "body_apex_supercar",
       "name": "Apex V10 Stradale",
-      "description": "Superdeportivo carmesí de motor central con difusor y alerón GT. Equilibrio letal entre punta y curva.",
+      "description": "Coupé deportivo de calle aligerado para Track-Day con alerón fijo GT.",
       "modelPath": "/cars/apex-supercar.glb",
       "yawOffsetRad": 0,
-      "weight": 13,
-      "downforceCoeff": 0.88,
-      "aeroSpeedFactor": 1.04,
-      "price": 440,
-      "author": "Open Source 3D (CC0)"
+      "weight": 14,
+      "downforceCoeff": 0.76,
+      "aeroSpeedFactor": 1.02,
+      "price": 0,
+      "author": "Open Source 3D"
     },
     {
-      "id": "body_cyber_f1",
-      "name": "Asurada Cyber-F1",
-      "description": "Monoplaza futurista ultraligero con efecto suelo extremo. Paso por curva de otro planeta.",
-      "modelPath": "/cars/cyber-formula.glb",
-      "weight": 10,
-      "downforceCoeff": 1.24,
-      "aeroSpeedFactor": 1.01,
-      "price": 550,
-      "author": "Grip Limit Works"
+      "id": "body_kenney_truck",
+      "name": "Titan Euro-Truck Racing",
+      "description": "Cabeza tractora de campeonato europeo de camiones. Par descomunal e inercia pesada en frenada.",
+      "modelPath": "/cars/kenney-race-truck.glb",
+      "yawOffsetRad": 0,
+      "weight": 24,
+      "downforceCoeff": 0.72,
+      "aeroSpeedFactor": 0.94,
+      "price": 0,
+      "author": "Kenney CC0"
     }
   ],
   "engines": [
     {
       "id": "eng_torque_v2",
-      "name": "Torque-Master V2",
-      "description": "Motor bobinado de alto par. Empuje contundente en subidas fuertes y horquillas lentas.",
-      "maxRpm": 17200,
-      "torque": 192,
-      "weight": 48,
+      "name": "Flat-6 4.0L Atmosférico GT3",
+      "description": "Entrega de par lineal desde bajas vueltas y gran retención de freno motor al reducir marchas.",
+      "maxRpm": 9000,
+      "torque": 188,
+      "weight": 52,
       "price": 0
     },
     {
       "id": "eng_hyper_plasma",
-      "name": "Hyper-Rev Plasma 24K",
-      "description": "Inducido de altas revoluciones para velocidad punta brutal. Exige manos finas en frenada.",
-      "maxRpm": 23800,
-      "torque": 158,
-      "weight": 64,
+      "name": "V10 5.2L Competición Atmosférico",
+      "description": "Estirada salvaje en 5ª y 6ª marcha para rectas largas. Exige anticipar la frenada.",
+      "maxRpm": 9600,
+      "torque": 172,
+      "weight": 58,
       "price": 0
     },
     {
       "id": "eng_ultra_cobalt",
-      "name": "Ultra-Dash Cobalto 27.5K",
-      "description": "Motor de competición con imanes de tierras raras: combina par alto y 27.500 RPM de punta.",
-      "maxRpm": 27500,
-      "torque": 186,
-      "weight": 56,
-      "price": 480
+      "name": "V6 1.6L Turbo-Híbrido F1/LMDh",
+      "description": "Unidad de potencia de máxima eficiencia térmica: par inmediato a medio régimen y máxima punta.",
+      "maxRpm": 10800,
+      "torque": 196,
+      "weight": 54,
+      "price": 0
     }
   ],
   "tires": [
     {
       "id": "tir_street_hard",
-      "name": "Compound Duro Sport",
-      "description": "Goma ligera de baja fricción. Derrapa pronto y permite cruzar la zaga con facilidad.",
-      "gripCoefficient": 1.28,
-      "weight": 16,
+      "name": "Slick Compuesto Duro (Endurance)",
+      "description": "Deslizamiento progresivo y predecible. Ideal para sentir el sobreviraje antes del límite.",
+      "gripCoefficient": 1.38,
+      "weight": 18,
       "price": 0
     },
     {
       "id": "tir_slick_soft",
-      "name": "Slick Blando Competición",
-      "description": "Máximo agarre mecánico de serie en horquillas lentas y cambios de pendiente en seco.",
+      "name": "Slick Compuesto Medio GT3 (P-Zero)",
+      "description": "Equilibrio ideal de agarre mecánico en horquillas lentas y cambios de apoyo.",
       "gripCoefficient": 1.74,
-      "weight": 23,
+      "weight": 20,
       "price": 0
     },
     {
       "id": "tir_wet_rain",
-      "name": "Lluvia Extrema Wet-Pro",
-      "description": "Dibujo direccional evacuador de agua: mantiene el 96% de adherencia bajo tormenta o pista mojada.",
+      "name": "Michelin Lluvia Extrema (Wet-Pro)",
+      "description": "Canales profundos de evacuación: mantiene el 96% de adherencia bajo lluvia intensa.",
       "gripCoefficient": 1.68,
-      "weight": 18,
-      "price": 260
+      "weight": 19,
+      "price": 0
     },
     {
       "id": "tir_foam_gripx",
-      "name": "Esponja Tratada Grip-X",
-      "description": "Compuesto microporoso ultraligero de slot profesional. Adherencia lateral extrema en seco sin lastre.",
+      "name": "Slick Clasificación Ultra-Blando (Qualy)",
+      "description": "Máximo coeficiente de fricción lateral en asfalto seco para batir récords en Contrarreloj.",
       "gripCoefficient": 1.96,
-      "weight": 14,
-      "price": 380
+      "weight": 17,
+      "price": 0
     }
   ],
   "rollers": [
     {
       "id": "rol_nylon_std",
-      "name": "Guía Nylon Estándar",
-      "description": "Pala guía ligera de serie. Margen de derrape estándar antes de desenganchar.",
-      "weight": 3,
-      "driftMarginBonus": 0.0,
-      "stressRecoveryBonus": 0.0,
+      "name": "Suspensión y Guía Estándar",
+      "description": "Tarado clásico directo. Transmite cada apoyo y exige finura con el acelerador en el vértice.",
+      "weight": 4,
+      "driftMarginBonus": 0.04,
+      "stressRecoveryBonus": 0.2,
       "price": 0
     },
     {
       "id": "rol_alu_double",
-      "name": "Rodillos Dobles Aluminio 19mm",
-      "description": "Estabilizadores Let's & Go con rodamientos: permiten cruzadas amplias sin saltar del raíl.",
-      "weight": 8,
+      "name": "Barras Estabilizadoras GT Pro",
+      "description": "Limita el balanceo de carrocería y amplía el margen de deslizamiento lateral un +16%.",
+      "weight": 7,
       "driftMarginBonus": 0.16,
       "stressRecoveryBonus": 0.9,
       "price": 0
     },
     {
       "id": "rol_ceramic_triple",
-      "name": "Rodillos Triples Aero-Cerámicos",
-      "description": "Estabilización activa de grado competición (+26% margen de derrape y reasentamiento ultrarrápido).",
+      "name": "Suspensión Activa Multiválvula FIA",
+      "description": "Control activo de cabeceo y balanceo (+26% margen de apoyo al límite y reasentamiento rápido).",
       "weight": 6,
       "driftMarginBonus": 0.26,
       "stressRecoveryBonus": 1.6,
-      "price": 420
+      "price": 0
     }
   ],
   "chassis": [
     {
       "id": "chs_carbon_x1",
-      "name": "Monocasco Aero-Slot X1",
-      "description": "Chasis de fibra con imán de neodimio calibrado y bajo centro de gravedad.",
-      "baseWeight": 98,
-      "centerOfGravity": 0.25,
+      "name": "Monocasco Fibra de Carbono GT3",
+      "description": "Chasis rígido con reparto de pesos 48/52 y centro de gravedad bajo (0.24 m).",
+      "baseWeight": 96,
+      "centerOfGravity": 0.24,
       "price": 0
     },
     {
       "id": "chs_titanium_zero",
-      "name": "Super-TZ Titanio Zero-CoG",
-      "description": "Subchasis aligerado con bancada baja (CoG 0.19 m): minimiza transferencia de masas y acelera más.",
+      "name": "Chasis Carbono-Titanio Prototipo",
+      "description": "Subchasis ultraligero con centro de gravedad extremo (0.18 m): reduce transferencia de masas en curvas enlazadas.",
       "baseWeight": 84,
-      "centerOfGravity": 0.19,
-      "price": 520
+      "centerOfGravity": 0.18,
+      "price": 0
     }
   ]
 }

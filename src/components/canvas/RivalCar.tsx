@@ -33,38 +33,38 @@ export interface BossProfile {
 
 export const CUP_BOSS_BY_TRACK: Record<TrackId, BossProfile> = {
   montmelo: {
-    name: 'Kai "Vortex"',
-    cupTitle: 'Copa Bronce · Catalunya',
-    defaultModelPath: '/cars/kenney-sedan-gt.glb',
-    altModelPath: '/cars/sonic-wing.glb',
-    defaultYawRad: Math.PI,
+    name: 'Kai · Huracán GT3',
+    cupTitle: 'GP Catalunya · 3 Vueltas',
+    defaultModelPath: '/cars/lambo-razor-pro.glb',
+    altModelPath: '/cars/lemans-apogee-pro.glb',
+    defaultYawRad: 0,
     altYawRad: 0,
-    maxSpeedMs: 179 / 3.6,
-    accelMs2: 13.1,
-    cornerAggression: 0.91,
+    maxSpeedMs: 186 / 3.6,
+    accelMs2: 12.8,
+    cornerAggression: 0.92,
     canOverpushUnderPressure: false,
   },
   'sierra-seca': {
-    name: 'Mako "Corkscrew"',
-    cupTitle: 'Copa Plata · Cañón Seca',
-    defaultModelPath: '/cars/apex-supercar.glb',
-    altModelPath: '/cars/phantom-stream.glb',
+    name: 'Mako · Senna GTR',
+    cupTitle: 'GP Sierra Seca · 3 Vueltas',
+    defaultModelPath: '/cars/hyper-specter-pro.glb',
+    altModelPath: '/cars/gt3-enduro-pro.glb',
     defaultYawRad: 0,
     altYawRad: 0,
-    maxSpeedMs: 189 / 3.6,
-    accelMs2: 14.3,
-    cornerAggression: 0.955,
+    maxSpeedMs: 194 / 3.6,
+    accelMs2: 13.8,
+    cornerAggression: 0.96,
     canOverpushUnderPressure: false,
   },
   'neo-wangan': {
-    name: 'Viktor "Midnight"',
-    cupTitle: 'Copa Oro · Shuto C1',
-    defaultModelPath: '/cars/tokyo-gt-turbo.glb',
-    altModelPath: '/cars/cyber-formula.glb',
+    name: 'Viktor · Skyline R34',
+    cupTitle: 'GP Shuto C1 · 3 Vueltas',
+    defaultModelPath: '/cars/skyline-kaido-pro.glb',
+    altModelPath: '/cars/f1-monoposto-pro.glb',
     defaultYawRad: 0,
     altYawRad: 0,
-    maxSpeedMs: 199 / 3.6,
-    accelMs2: 15.5,
+    maxSpeedMs: 204 / 3.6,
+    accelMs2: 14.8,
     cornerAggression: 0.985,
     canOverpushUnderPressure: true,
   },
@@ -87,9 +87,9 @@ export const livePlayerProgress = {
   totalDistanceM: 0,
 };
 
-const RIVAL_WEIGHT_KG = 176;
-const RIVAL_BASE_GRIP_N = 7400;
-const RIVAL_AERO_COEFF = 0.58;
+const RIVAL_WEIGHT_KG = 172;
+const RIVAL_BASE_GRIP_N = 7600;
+const RIVAL_AERO_COEFF = 0.65;
 const RIVAL_BRAKE_MS2 = 34.5;
 
 const _rivalKinematics: SplineKinematicsResult = {
@@ -109,19 +109,19 @@ const _camRightVec = new THREE.Vector3();
 const _rivalVelVec = new THREE.Vector3();
 
 /**
- * Coche Rival / Jefes IA de la Copa Let's & Go sobre el carril paralelo de Scalextric con:
- * - 3 Jefes con personalidad propia (Kai en Montmeló, Mako en Sierra Seca, Viktor en Neo-Wangan).
- * - Salida sincronizada con el Semáforo F1 en Modo Copa 3V.
- * - Audio espacial 3D en tiempo real (paneo estéreo izq/der, atenuación por distancia y Doppler).
+ * Coche Rival IA de alta densidad poligonal (100k+ vértices PBR).
+ * Activo exclusivamente en "Modo VS IA" (`raceMode === 'vs-ai'`), sincronizado con el Semáforo F1.
  */
 export function RivalCar() {
   const groupRef = useRef<THREE.Group>(null);
 
   const trackId = useTelemetryStore((s) => s.trackId);
   const playerLane = useTelemetryStore((s) => s.playerLane);
-  const rivalEnabled = useTelemetryStore((s) => s.rivalEnabled);
+  const raceMode = useTelemetryStore((s) => s.raceMode);
   const resetNonce = useTelemetryStore((s) => s.resetNonce);
   const playerModelPath = useGarageStore((s) => s.carStats.modelPath);
+
+  const isVsMode = raceMode === 'vs-ai';
 
   const boss = CUP_BOSS_BY_TRACK[trackId];
   const useAltModel = playerModelPath === boss.defaultModelPath;
@@ -141,6 +141,7 @@ export function RivalCar() {
 
   const rivalMotionRef = useRef<CarVisualMotionState>({
     bodyRollRad: 0,
+    bodyPitchRad: 0,
     driftYawRad: 0,
     driftIntensity: 0,
     speedMs: 0,
@@ -172,19 +173,19 @@ export function RivalCar() {
     liveRivalState.isDerailed = false;
     liveRivalState.bossName = boss.name;
     liveRivalState.cupTitle = boss.cupTitle;
-  }, [trackId, resetNonce, boss.name, boss.cupTitle]);
+  }, [trackId, resetNonce, raceMode, boss.name, boss.cupTitle]);
 
   useEffect(() => {
-    if (!rivalEnabled) {
+    if (!isVsMode) {
       soundEngine.silenceRival();
     }
     return () => {
       soundEngine.silenceRival();
     };
-  }, [rivalEnabled]);
+  }, [isVsMode]);
 
   useFrame((state, rawDelta) => {
-    if (!rivalEnabled) {
+    if (!isVsMode) {
       soundEngine.silenceRival();
       return;
     }
@@ -204,11 +205,8 @@ export function RivalCar() {
       1 - Math.exp(-10 * dt)
     );
 
-    // En Modo Copa durante la cuenta atrás del semáforo, el rival permanece parado en parrilla
-    const waitingAtStartGrid =
-      telemetry.raceMode === 'cup' && telemetry.cupStartPhase === 'countdown';
-
-    if (waitingAtStartGrid) {
+    // Mientras el Semáforo F1 está en cuenta atrás roja, el coche IA espera alineado en la parrilla de salida
+    if (telemetry.cupStartPhase === 'countdown') {
       sim.distanceM = 0;
       sim.lapCount = 1;
       sim.speedMs = 0;
@@ -224,7 +222,6 @@ export function RivalCar() {
       return;
     }
 
-    // Gestión de micro-descarrilamiento por presión cuando acosas a Viktor en Neo-Wangan
     if (sim.derailTimerSec > 0) {
       sim.derailTimerSec -= dt;
       sim.speedMs = Math.max(0, sim.speedMs - 24 * dt);
@@ -240,7 +237,6 @@ export function RivalCar() {
       return;
     }
 
-    // Comprobar si el jugador está presionando muy de cerca al rival (< 7.5 m)
     const rivalTotalDist =
       (sim.lapCount - 1) * trackLengthM + sim.distanceM;
     const gapAheadOfPlayer =
@@ -338,8 +334,8 @@ export function RivalCar() {
     const nextDistance = sim.distanceM + sim.speedMs * arcScale * dt;
     if (nextDistance >= trackLengthM) {
       if (
-        telemetry.raceMode === 'cup' &&
-        telemetry.cupStartPhase === 'green' &&
+        telemetry.raceMode === 'vs-ai' &&
+        telemetry.cupStartPhase !== 'finished' &&
         sim.lapCount >= telemetry.cupTargetLaps
       ) {
         telemetry.finishCupRace('rival');
@@ -376,7 +372,6 @@ export function RivalCar() {
     const gripRatio = dynGrip > 0 ? fc / dynGrip : 0;
     const driftInt = THREE.MathUtils.clamp((gripRatio - 0.85) / 0.42, 0, 0.88);
 
-    // Si Viktor acumula demasiada presión en una curva cerrada, puede derrapar de más y salirse 1.25 s
     if (
       boss.canOverpushUnderPressure &&
       sim.pressureAccumulatorSec > 2.2 &&
@@ -402,6 +397,11 @@ export function RivalCar() {
       -_rivalKinematics.turnSign * Math.min(1.1, gripRatio) * 0.13,
       1 - Math.exp(-12 * dt)
     );
+    vis.bodyPitchRad = THREE.MathUtils.lerp(
+      vis.bodyPitchRad ?? 0,
+      mustBrake ? 0.032 : aiThrottle > 0 ? -0.016 : 0,
+      1 - Math.exp(-10 * dt)
+    );
 
     liveRivalState.distanceM = sim.distanceM;
     liveRivalState.lapCount = sim.lapCount;
@@ -411,7 +411,6 @@ export function RivalCar() {
     liveRivalState.bossName = boss.name;
     liveRivalState.cupTitle = boss.cupTitle;
 
-    // Espacialización 3D del audio respecto a la cámara activa
     _toRivalVec.subVectors(_rivalPos, state.camera.position);
     const distToCam = Math.max(0.5, _toRivalVec.length());
     _toRivalVec.divideScalar(distToCam);
@@ -436,7 +435,7 @@ export function RivalCar() {
     });
   });
 
-  if (!rivalEnabled) return null;
+  if (!isVsMode) return null;
 
   return (
     <group ref={groupRef} name="rival-slot-car">

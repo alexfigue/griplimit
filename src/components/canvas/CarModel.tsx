@@ -5,8 +5,8 @@ import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 
-export const CAR_GLB_PATH = '/car.glb';
-const TARGET_CAR_LENGTH_M = 4.2;
+export const CAR_GLB_PATH = '/cars/gt3-enduro-pro.glb';
+const TARGET_CAR_LENGTH_M = 4.4;
 export const SLOT_GUIDE_PIN_OFFSET_Z = 1.45;
 const SPARK_POOL_SIZE = 28;
 const WHEEL_RADIUS_M = 0.33;
@@ -22,8 +22,123 @@ const GHOST_HOLOGRAM_MATERIAL = new THREE.MeshStandardMaterial({
   depthWrite: false,
 });
 
+const CAR_SIGNATURE_PAINT_HEX: Record<string, number> = {
+  '/cars/gt3-enduro-pro.glb': 0xd91b2e, // Porsche GT3 Guards Red
+  '/cars/lambo-razor-pro.glb': 0xeab308, // Lamborghini Giallo Orion
+  '/cars/hyper-specter-pro.glb': 0xf97316, // McLaren Papaya Orange
+  '/cars/skyline-kaido-pro.glb': 0x1d4ed8, // Nissan R34 Bayside Blue
+  '/cars/lemans-apogee-pro.glb': 0x0284c7, // Ford GT Liquid Blue
+  '/cars/jdm-touge-pro.glb': 0xf1f5f9, // AE86 Fuji White
+  '/cars/f1-monoposto-pro.glb': 0xdc2626, // Scuderia Rosso Corsa
+};
+
+interface WheelSpec {
+  x: number;
+  y: number;
+  z: number;
+  r: number;
+  w: number;
+  rim?: number;
+}
+
+interface ProCarExtras {
+  wheels?: {
+    front: WheelSpec;
+    rear: WheelSpec;
+  };
+}
+
+function buildDetailedRacingWheel(
+  spec: WheelSpec,
+  isLeft: boolean,
+  isGhost: boolean
+): THREE.Group {
+  const wheelGroup = new THREE.Group();
+  const r = spec.r || 0.33;
+  const w = spec.w || 0.28;
+  const rimR = spec.rim || r * 0.64;
+
+  if (isGhost) {
+    const ghostTire = new THREE.Mesh(
+      new THREE.CylinderGeometry(r, r, w, 20),
+      GHOST_HOLOGRAM_MATERIAL
+    );
+    ghostTire.rotation.z = Math.PI / 2;
+    wheelGroup.add(ghostTire);
+    return wheelGroup;
+  }
+
+  // 1. Neumático Slick de caucho vulcanizado
+  const tireGeo = new THREE.CylinderGeometry(r, r, w, 28);
+  tireGeo.rotateZ(Math.PI / 2);
+  const tireMat = new THREE.MeshStandardMaterial({
+    color: '#12151A',
+    roughness: 0.76,
+    metalness: 0.08,
+  });
+  const tireMesh = new THREE.Mesh(tireGeo, tireMat);
+  tireMesh.castShadow = true;
+  tireMesh.receiveShadow = true;
+  wheelGroup.add(tireMesh);
+
+  // 2. Tambor interior de llanta de aleación forjada
+  const rimGeo = new THREE.CylinderGeometry(rimR, rimR, w * 1.03, 24);
+  rimGeo.rotateZ(Math.PI / 2);
+  const rimMat = new THREE.MeshStandardMaterial({
+    color: '#CBD5E1',
+    metalness: 0.88,
+    roughness: 0.2,
+  });
+  const rimMesh = new THREE.Mesh(rimGeo, rimMat);
+  wheelGroup.add(rimMesh);
+
+  // 3. Disco de freno cerámico ventilado interior
+  const discGeo = new THREE.CylinderGeometry(
+    rimR * 0.78,
+    rimR * 0.78,
+    w * 1.05,
+    20
+  );
+  discGeo.rotateZ(Math.PI / 2);
+  const discMat = new THREE.MeshStandardMaterial({
+    color: '#475569',
+    metalness: 0.82,
+    roughness: 0.32,
+  });
+  wheelGroup.add(new THREE.Mesh(discGeo, discMat));
+
+  // 4. Radios forjados (5 radios dobles) para apreciar claramente el giro físico a alta velocidad
+  const spokeMat = new THREE.MeshStandardMaterial({
+    color: '#E2E8F0',
+    metalness: 0.92,
+    roughness: 0.16,
+  });
+  const outerX = (isLeft ? 1 : -1) * (w * 0.49);
+  const spokeGeo = new THREE.BoxGeometry(0.025, rimR * 1.82, 0.036);
+  for (let s = 0; s < 5; s++) {
+    const spoke = new THREE.Mesh(spokeGeo, spokeMat);
+    spoke.position.x = outerX;
+    spoke.rotation.x = (s * Math.PI) / 5;
+    wheelGroup.add(spoke);
+  }
+
+  // 5. Tuerca central monotuerca de competición (Center-Lock Roja)
+  const nutGeo = new THREE.CylinderGeometry(0.048, 0.048, w * 1.09, 12);
+  nutGeo.rotateZ(Math.PI / 2);
+  const nutMat = new THREE.MeshStandardMaterial({
+    color: '#E63946',
+    metalness: 0.75,
+    roughness: 0.22,
+  });
+  wheelGroup.add(new THREE.Mesh(nutGeo, nutMat));
+
+  return wheelGroup;
+}
+
 export interface CarVisualMotionState {
   bodyRollRad: number;
+  /** Cabeceo longitudinal de suspensión: positivo al hundir el morro en frenada, negativo al acelerar */
+  bodyPitchRad?: number;
   driftYawRad: number;
   driftIntensity: number;
   /** Velocidad instantánea lineal (m/s) para giro físico de las 4 ruedas (ω = v / r) */
@@ -32,7 +147,7 @@ export interface CarVisualMotionState {
   brakeIntensity?: number;
   /** Nivel de estrés vertical en la guía [0, 1] para emitir chispas metálicas */
   guideStress?: number;
-  /** Indica si la descarga eléctrica OverVolt 18V está activa */
+  /** Indica si hay sobrecarga eléctrica / salida turbo */
   overVoltActive?: boolean;
   isDerailed: boolean;
 }
@@ -40,6 +155,7 @@ export interface CarVisualMotionState {
 export interface CarModelProps {
   modelPath?: string;
   modelYawOffsetRad?: number;
+  paintColorOverrideHex?: number;
   isGhost?: boolean;
   motionRef?: React.RefObject<CarVisualMotionState>;
   isDerailed?: boolean;
@@ -48,6 +164,7 @@ export interface CarModelProps {
 interface LoadedGLBProps {
   modelPath: string;
   yawOffsetRad: number;
+  paintColorOverrideHex?: number;
   isGhost: boolean;
 }
 
@@ -62,12 +179,66 @@ function hasWheelAncestor(obj: THREE.Object3D, root: THREE.Object3D): boolean {
   return false;
 }
 
-function LoadedCarGLB({ modelPath, yawOffsetRad, isGhost }: LoadedGLBProps) {
+function LoadedCarGLB({
+  modelPath,
+  yawOffsetRad,
+  paintColorOverrideHex,
+  isGhost,
+}: LoadedGLBProps) {
   const { scene } = useGLTF(modelPath);
 
   const normalizedModel = useMemo(() => {
     const cloned = scene.clone(true);
     const wheelNodes: THREE.Object3D[] = [];
+    const brakeMaterials: THREE.MeshStandardMaterial[] = [];
+
+    // Eliminar mallas de bajo detalle (lod1+) en modelos Pro multi-LOD para dejar solo lod0 (100k+ vértices)
+    const lodNodesToRemove: THREE.Object3D[] = [];
+    cloned.traverse((child) => {
+      if (/^lod[1-9]/i.test(child.name)) {
+        lodNodesToRemove.push(child);
+      }
+    });
+    for (const n of lodNodesToRemove) {
+      n.parent?.remove(n);
+    }
+
+    const basePaintHex =
+      paintColorOverrideHex ??
+      CAR_SIGNATURE_PAINT_HEX[modelPath] ??
+      0xd91b2e;
+
+    const paintMaterial = new THREE.MeshPhysicalMaterial({
+      color: basePaintHex,
+      metalness: 0.7,
+      roughness: 0.18,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.06,
+    });
+    const glassMaterial = new THREE.MeshPhysicalMaterial({
+      color: '#090E1A',
+      metalness: 0.15,
+      roughness: 0.06,
+      clearcoat: 1.0,
+      transparent: true,
+      opacity: 0.84,
+    });
+    const carbonMaterial = new THREE.MeshStandardMaterial({
+      color: '#151922',
+      metalness: 0.45,
+      roughness: 0.36,
+    });
+    const chromeMaterial = new THREE.MeshStandardMaterial({
+      color: '#E2E8F0',
+      metalness: 0.94,
+      roughness: 0.1,
+    });
+    const headlightMaterial = new THREE.MeshStandardMaterial({
+      color: '#FFFFFF',
+      emissive: '#E0F2FE',
+      emissiveIntensity: 2.2,
+      roughness: 0.1,
+    });
 
     cloned.traverse((child) => {
       if (
@@ -85,9 +256,65 @@ function LoadedCarGLB({ modelPath, yawOffsetRad, isGhost }: LoadedGLBProps) {
         } else {
           child.castShadow = true;
           child.receiveShadow = true;
+
+          const matName = (
+            (child.material as THREE.Material)?.name ?? ''
+          ).toLowerCase();
+
+          if (matName.includes('paint')) {
+            child.material = paintMaterial;
+          } else if (
+            matName.includes('glass') ||
+            matName.includes('window') ||
+            matName.includes('lens')
+          ) {
+            child.material = glassMaterial;
+          } else if (
+            matName.includes('carbon') ||
+            matName.includes('grille') ||
+            matName.includes('trim') ||
+            matName.includes('interior')
+          ) {
+            child.material = carbonMaterial;
+          } else if (
+            matName.includes('chrome') ||
+            matName.includes('exhaust')
+          ) {
+            child.material = chromeMaterial;
+          } else if (matName.includes('head') || matName.includes('drl')) {
+            child.material = headlightMaterial;
+          } else if (matName.includes('tail')) {
+            const tailMat = new THREE.MeshStandardMaterial({
+              color: '#FF1E38',
+              emissive: '#FF1E38',
+              emissiveIntensity: 0.65,
+              roughness: 0.18,
+            });
+            child.material = tailMat;
+            brakeMaterials.push(tailMat);
+          }
         }
       }
     });
+
+    // Si el modelo Pro incluye especificaciones CAD de ejes en userData.wheels, ensamblar las 4 ruedas 3D detalladas
+    const extras = (scene.userData ?? {}) as ProCarExtras;
+    if (extras.wheels?.front && extras.wheels?.rear && wheelNodes.length === 0) {
+      const { front, rear } = extras.wheels;
+      const placements: Array<{ spec: WheelSpec; xSign: 1 | -1; isLeft: boolean }> = [
+        { spec: front, xSign: 1, isLeft: true },
+        { spec: front, xSign: -1, isLeft: false },
+        { spec: rear, xSign: 1, isLeft: true },
+        { spec: rear, xSign: -1, isLeft: false },
+      ];
+
+      for (const p of placements) {
+        const wGroup = buildDetailedRacingWheel(p.spec, p.isLeft, isGhost);
+        wGroup.position.set(p.spec.x * p.xSign, p.spec.y, p.spec.z);
+        cloned.add(wGroup);
+        wheelNodes.push(wGroup);
+      }
+    }
 
     const orientedGroup = new THREE.Group();
     cloned.rotation.y = yawOffsetRad;
@@ -118,9 +345,10 @@ function LoadedCarGLB({ modelPath, yawOffsetRad, isGhost }: LoadedGLBProps) {
 
     wrapper.add(orientedGroup);
     wrapper.userData.wheels = wheelNodes;
+    wrapper.userData.brakeMaterials = brakeMaterials;
     wrapper.userData.spinDirection = Math.cos(yawOffsetRad) >= 0 ? 1 : -1;
     return wrapper;
-  }, [scene, yawOffsetRad, isGhost]);
+  }, [scene, yawOffsetRad, paintColorOverrideHex, isGhost, modelPath]);
 
   return <primitive object={normalizedModel} />;
 }
@@ -140,34 +368,8 @@ function FallbackSlotCarMesh({ isGhost = false }: { isGhost?: boolean }) {
     <group>
       <mesh position={[0, 0.36, 0]} castShadow receiveShadow>
         <boxGeometry args={[1.85, 0.42, 4.1]} />
-        <meshStandardMaterial color="#2F81F7" metalness={0.35} roughness={0.35} />
+        <meshStandardMaterial color="#D91B2E" metalness={0.65} roughness={0.2} />
       </mesh>
-      <mesh position={[0, 0.68, -0.15]} castShadow>
-        <boxGeometry args={[1.15, 0.34, 1.75]} />
-        <meshStandardMaterial color="#0D1117" metalness={0.7} roughness={0.18} />
-      </mesh>
-      <mesh position={[0, 0.86, -1.85]} castShadow>
-        <boxGeometry args={[1.95, 0.1, 0.48]} />
-        <meshStandardMaterial color="#E63946" metalness={0.25} roughness={0.4} />
-      </mesh>
-      {(
-        [
-          [-0.98, 0.32, 1.25],
-          [0.98, 0.32, 1.25],
-          [-0.98, 0.34, -1.28],
-          [0.98, 0.34, -1.28],
-        ] as const
-      ).map(([wx, wy, wz], idx) => (
-        <mesh
-          key={idx}
-          position={[wx, wy, wz]}
-          rotation={[0, 0, Math.PI / 2]}
-          castShadow
-        >
-          <cylinderGeometry args={[0.33, 0.33, 0.36, 16]} />
-          <meshStandardMaterial color="#181C22" roughness={0.75} />
-        </mesh>
-      ))}
     </group>
   );
 }
@@ -204,14 +406,14 @@ class CarGLBErrorBoundary extends Component<
 
 /**
  * Componente 3D del vehículo con:
- * - Normalización automática de escala (4.2 m) y rotación (`modelYawOffsetRad`) para modelos `.glb` oficiales y de la comunidad.
- * - Rotación física real de las 4 ruedas ($\omega = v / r$) en nodos `wheel*` / `tire*` del `.glb`.
- * - Modo holográfico translúcido (`isGhost`) para el Ghost Car de tu mejor vuelta.
- * - Pivote físico sobre la guía delantera (Z = +1.45 m), luces LED de freno y chispas metálicas / eléctricas OverVolt 0-GC.
+ * - Renderizado PBR Clearcoat de alta densidad poligonal (100k+ vértices) + llantas forjadas con discos y pinzas.
+ * - Rotación física real de las 4 ruedas ($\omega = v / r$) y cabeceo/balanceo de suspensión (Pitch & Roll).
+ * - Luces de freno LED integradas en la malla 3D del coche y chispas metálicas en la guía delantera.
  */
 export function CarModel({
   modelPath = CAR_GLB_PATH,
   modelYawOffsetRad = 0,
+  paintColorOverrideHex,
   isGhost = false,
   motionRef,
   isDerailed = false,
@@ -225,7 +427,6 @@ export function CarModel({
   const rightBrakeLightRef = useRef<THREE.Mesh>(null);
   const sparksPointsRef = useRef<THREE.Points>(null);
 
-  // Pool fijo de partículas para chispas metálicas/eléctricas de la guía (cero asignaciones en useFrame)
   const sparkPool = useMemo(() => {
     const positions = new Float32Array(SPARK_POOL_SIZE * 3);
     const velocities = new Float32Array(SPARK_POOL_SIZE * 3);
@@ -248,6 +449,7 @@ export function CarModel({
     const dt = Math.min(rawDelta, 0.05);
     const {
       bodyRollRad,
+      bodyPitchRad = 0,
       driftYawRad,
       driftIntensity,
       speedMs = 0,
@@ -260,15 +462,19 @@ export function CarModel({
     if (guidePivotRef.current) {
       guidePivotRef.current.rotation.y = driftYawRad;
     }
+
+    const isBraking = !derailed && brakeIntensity > 0.1;
+
     if (chassisRollRef.current) {
       chassisRollRef.current.rotation.z = bodyRollRad;
+      chassisRollRef.current.rotation.x = bodyPitchRad;
 
-      // 0. Giro físico real de las 4 ruedas (ω = v / r)
-      if (!derailed && speedMs > 0.05) {
-        const glbWrapper = chassisRollRef.current.getObjectByName(
-          'glb-normalized-wrapper'
-        );
-        if (glbWrapper) {
+      const glbWrapper = chassisRollRef.current.getObjectByName(
+        'glb-normalized-wrapper'
+      );
+      if (glbWrapper) {
+        // Giro físico real de las 4 ruedas (ω = v / r)
+        if (!derailed && speedMs > 0.05) {
           const wheels = glbWrapper.userData.wheels as
             | THREE.Object3D[]
             | undefined;
@@ -280,12 +486,22 @@ export function CarModel({
             }
           }
         }
+
+        // Iluminación de las ópticas traseras 3D esculpidas en el modelo .glb
+        const brakeMats = glbWrapper.userData.brakeMaterials as
+          | THREE.MeshStandardMaterial[]
+          | undefined;
+        if (brakeMats && brakeMats.length > 0) {
+          const targetEmissive = isBraking ? 4.8 : 0.65;
+          for (let m = 0; m < brakeMats.length; m++) {
+            brakeMats[m].emissiveIntensity = targetEmissive;
+          }
+        }
       }
     }
 
     if (isGhost) return;
 
-    // Guía delantera y color de descarga eléctrica OverVolt
     if (guidePinMeshRef.current) {
       const pinMat = guidePinMeshRef.current
         .material as THREE.MeshStandardMaterial;
@@ -304,24 +520,18 @@ export function CarModel({
       }
     }
 
-    // 1. Luces traseras de freno LED
-    const isBraking = !derailed && brakeIntensity > 0.1;
     for (const lightMesh of [
       leftBrakeLightRef.current,
       rightBrakeLightRef.current,
     ]) {
       if (!lightMesh) continue;
       const mat = lightMesh.material as THREE.MeshStandardMaterial;
-      mat.emissiveIntensity = isBraking ? 3.8 : 0.35;
-      lightMesh.scale.setScalar(isBraking ? 1.18 : 1.0);
+      mat.emissiveIntensity = isBraking ? 4.2 : 0.35;
+      lightMesh.scale.setScalar(isBraking ? 1.2 : 1.0);
     }
 
-    // 2. Brillo térmico bajo neumáticos traseros en derrape o descarga OverVolt
-    const showSkid =
-      !derailed && (driftIntensity > 0.05 || overVoltActive);
-    const glowScaleZ = overVoltActive
-      ? 1.85
-      : 0.5 + driftIntensity * 1.9;
+    const showSkid = !derailed && (driftIntensity > 0.08 || overVoltActive);
+    const glowScaleZ = overVoltActive ? 1.85 : 0.5 + driftIntensity * 1.9;
     const glowColorHex = overVoltActive
       ? 0x38bdf8
       : driftIntensity > 0.65
@@ -341,7 +551,6 @@ export function CarModel({
       }
     }
 
-    // 3. Chispas metálicas en la guía delantera cuando hay fricción intensa o OverVolt 18V activo
     const sparkIntensity = Math.max(
       guideStress,
       driftIntensity * 0.85,
@@ -385,8 +594,7 @@ export function CarModel({
 
     if (sparksPointsRef.current) {
       sparksPointsRef.current.visible = anyAlive;
-      const ptsMat = sparksPointsRef.current
-        .material as THREE.PointsMaterial;
+      const ptsMat = sparksPointsRef.current.material as THREE.PointsMaterial;
       ptsMat.color.setHex(overVoltActive ? 0x38bdf8 : 0xfbbf24);
       if (anyAlive) {
         const posAttr = sparkPool.geo.getAttribute(
@@ -401,7 +609,6 @@ export function CarModel({
     <group>
       {!isGhost && (
         <>
-          {/* Guía delantera en la ranura */}
           <mesh
             ref={guidePinMeshRef}
             position={[0, 0.05, SLOT_GUIDE_PIN_OFFSET_Z]}
@@ -414,7 +621,6 @@ export function CarModel({
             />
           </mesh>
 
-          {/* Partículas de chispas metálicas/eléctricas de la trencilla/guía */}
           <points
             ref={sparksPointsRef}
             geometry={sparkPool.geo}
@@ -433,7 +639,6 @@ export function CarModel({
         </>
       )}
 
-      {/* Carrocería pivotando sobre la guía delantera */}
       <group ref={guidePivotRef} position={[0, 0, SLOT_GUIDE_PIN_OFFSET_Z]}>
         <group ref={chassisRollRef} position={[0, 0, -SLOT_GUIDE_PIN_OFFSET_Z]}>
           <CarGLBErrorBoundary
@@ -444,6 +649,7 @@ export function CarModel({
               <LoadedCarGLB
                 modelPath={modelPath}
                 yawOffsetRad={modelYawOffsetRad}
+                paintColorOverrideHex={paintColorOverrideHex}
                 isGhost={isGhost}
               />
             </Suspense>
@@ -451,9 +657,8 @@ export function CarModel({
 
           {!isGhost && (
             <>
-              {/* Pilotos traseros LED de freno */}
-              <mesh ref={leftBrakeLightRef} position={[-0.58, 0.38, -2.04]}>
-                <boxGeometry args={[0.34, 0.09, 0.08]} />
+              <mesh ref={leftBrakeLightRef} position={[-0.58, 0.44, -2.14]}>
+                <boxGeometry args={[0.32, 0.07, 0.06]} />
                 <meshStandardMaterial
                   color="#FF1E38"
                   emissive="#FF1E38"
@@ -461,8 +666,8 @@ export function CarModel({
                   roughness={0.2}
                 />
               </mesh>
-              <mesh ref={rightBrakeLightRef} position={[0.58, 0.38, -2.04]}>
-                <boxGeometry args={[0.34, 0.09, 0.08]} />
+              <mesh ref={rightBrakeLightRef} position={[0.58, 0.44, -2.14]}>
+                <boxGeometry args={[0.32, 0.07, 0.06]} />
                 <meshStandardMaterial
                   color="#FF1E38"
                   emissive="#FF1E38"
@@ -471,14 +676,13 @@ export function CarModel({
                 />
               </mesh>
 
-              {/* Brillo térmico bajo neumáticos traseros */}
               <mesh
                 ref={leftSkidGlowRef}
                 visible={false}
-                position={[-0.96, 0.04, -1.55]}
+                position={[-0.86, 0.03, -1.45]}
                 rotation={[-Math.PI / 2, 0, 0]}
               >
-                <planeGeometry args={[0.38, 1.15]} />
+                <planeGeometry args={[0.36, 1.1]} />
                 <meshBasicMaterial
                   color="#F59E0B"
                   transparent
@@ -490,10 +694,10 @@ export function CarModel({
               <mesh
                 ref={rightSkidGlowRef}
                 visible={false}
-                position={[0.96, 0.04, -1.55]}
+                position={[0.86, 0.03, -1.45]}
                 rotation={[-Math.PI / 2, 0, 0]}
               >
-                <planeGeometry args={[0.38, 1.15]} />
+                <planeGeometry args={[0.36, 1.1]} />
                 <meshBasicMaterial
                   color="#F59E0B"
                   transparent
@@ -510,15 +714,12 @@ export function CarModel({
   );
 }
 
-useGLTF.preload(CAR_GLB_PATH);
-useGLTF.preload('/cars/aero-saber.glb');
-useGLTF.preload('/cars/sonic-wing.glb');
-useGLTF.preload('/cars/phantom-stream.glb');
-useGLTF.preload('/cars/tokyo-gt-turbo.glb');
-useGLTF.preload('/cars/cyber-formula.glb');
-useGLTF.preload('/cars/kenney-sedan-gt.glb');
-useGLTF.preload('/cars/apex-supercar.glb');
-useGLTF.preload('/cars/kenney-race-truck.glb');
-useGLTF.preload('/cars/kenney-moto-gp.glb');
+useGLTF.preload('/cars/gt3-enduro-pro.glb');
+useGLTF.preload('/cars/lambo-razor-pro.glb');
+useGLTF.preload('/cars/hyper-specter-pro.glb');
+useGLTF.preload('/cars/skyline-kaido-pro.glb');
+useGLTF.preload('/cars/lemans-apogee-pro.glb');
+useGLTF.preload('/cars/jdm-touge-pro.glb');
+useGLTF.preload('/cars/f1-monoposto-pro.glb');
 
 export default CarModel;

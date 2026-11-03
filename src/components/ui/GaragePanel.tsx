@@ -181,8 +181,8 @@ export function GaragePanel() {
             Garaje · {activeParts.body.name}
           </span>
           <span className="block font-mono text-[11px] tabular-nums text-slate-400">
-            <span className="font-semibold text-[#F59E0B]">
-              {gpCredits} GP
+            <span className="font-semibold text-emerald-400">
+              Acceso Total
             </span>{' '}
             · {carStats.TotalWeight} kg · {Math.round(carStats.TotalGrip)} N
           </span>
@@ -194,29 +194,16 @@ export function GaragePanel() {
 
       {isOpen && (
         <div className="absolute top-full right-0 z-40 mt-2 w-84 sm:w-[420px] max-h-[80vh] overflow-y-auto rounded-md border border-slate-700/90 bg-[#151B24]/97 p-4 shadow-2xl backdrop-blur-md">
-          {/* Barra superior de Economía GP + Modo Sandbox */}
+          {/* Barra superior de Acceso Total al Garaje + Showroom 360° */}
           <div className="mb-2.5 flex items-center justify-between gap-2 rounded-xs border border-slate-800 bg-[#0D1117]/90 px-3 py-2">
             <div>
-              <span className="block text-[10px] text-cyan-400 font-mono">
-                🎥 Showroom 360° activo · Sin ayuda: ×1.35 GP
+              <span className="block font-mono text-[10px] text-cyan-400">
+                🎥 Showroom 360° activo · Acceso Completo Pro
               </span>
-              <span className="font-mono text-sm font-bold tabular-nums text-[#F59E0B]">
-                {gpCredits} GP disponibles
+              <span className="font-mono text-xs font-bold text-emerald-400">
+                ✓ Todos los coches (100k+ vértices) y piezas desbloqueados
               </span>
             </div>
-
-            <button
-              type="button"
-              onClick={toggleSandboxUnlocked}
-              title="Desbloquea todas las piezas gratis al instante para probar configuraciones"
-              className={`rounded-xs border px-2.5 py-1 font-mono text-[11px] font-semibold transition-colors ${
-                sandboxUnlocked
-                  ? 'border-emerald-500/70 bg-emerald-500/20 text-emerald-200'
-                  : 'border-slate-700 bg-[#151B24] text-slate-300 hover:border-slate-500'
-              }`}
-            >
-              Sandbox: {sandboxUnlocked ? 'ON' : 'OFF'}
-            </button>
           </div>
 
           {notice && (

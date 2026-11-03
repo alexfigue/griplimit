@@ -103,6 +103,7 @@ class VehicleSynthVoice {
   public update(params: {
     speedMs: number;
     maxSpeedMs: number;
+    engineRpm?: number;
     maxRpm: number;
     throttle: number;
     driftIntensity: number;
@@ -121,28 +122,32 @@ class VehicleSynthVoice {
         ? Math.min(1.12, params.speedMs / params.maxSpeedMs)
         : 0;
 
-    const currentRpm =
-      1200 + speedNorm * (params.maxRpm - 1200) + params.throttle * 1100;
-    const baseFreq =
-      (this.config.basePitchOffsetHz + (currentRpm / 24000) * 465) *
-      params.dopplerFactor;
+    const rpmRatio =
+      typeof params.engineRpm === 'number' && params.maxRpm > 0
+        ? Math.min(1.08, Math.max(0.15, params.engineRpm / params.maxRpm))
+        : 0.18 + speedNorm * 0.78 + params.throttle * 0.08;
 
-    this.oscMain.frequency.setTargetAtTime(baseFreq, now, 0.025);
+    const baseFreq =
+      (this.config.basePitchOffsetHz + rpmRatio * 295) * params.dopplerFactor;
+
+    this.oscMain.frequency.setTargetAtTime(baseFreq, now, 0.018);
     this.oscHarmonic.frequency.setTargetAtTime(
       baseFreq * this.config.harmonicMultiplier,
       now,
-      0.025
+      0.018
     );
 
-    const cutoffFreq = 320 + speedNorm * 1950 + params.throttle * 820;
-    this.motorFilter.frequency.setTargetAtTime(cutoffFreq, now, 0.03);
+    const cutoffFreq = 280 + rpmRatio * 2150 + params.throttle * 900;
+    this.motorFilter.frequency.setTargetAtTime(cutoffFreq, now, 0.025);
 
+    const isRevvingInNeutral =
+      params.speedMs < 0.25 && (params.engineRpm ?? 0) > 2100;
     const rawMotorVol =
-      params.speedMs < 0.25 && params.throttle < 0.02
-        ? 0.0
-        : (0.14 + speedNorm * 0.22 + params.throttle * 0.13) *
+      params.speedMs < 0.25 && params.throttle < 0.02 && !isRevvingInNeutral
+        ? 0.04 * params.volumeScale
+        : (0.14 + rpmRatio * 0.22 + params.throttle * 0.14) *
           params.volumeScale;
-    this.motorGain.gain.setTargetAtTime(rawMotorVol, now, 0.03);
+    this.motorGain.gain.setTargetAtTime(rawMotorVol, now, 0.025);
 
     const skidVol =
       params.driftIntensity > 0.06 && params.speedMs > 4
@@ -238,6 +243,7 @@ class ProceduralSlotSoundEngine {
   public updateContinuousFrame(params: {
     speedMs: number;
     maxSpeedMs: number;
+    engineRpm?: number;
     maxRpm: number;
     throttle: number;
     driftIntensity: number;
@@ -257,6 +263,7 @@ class ProceduralSlotSoundEngine {
     this.playerVoice?.update({
       speedMs: params.speedMs,
       maxSpeedMs: params.maxSpeedMs,
+      engineRpm: params.engineRpm,
       maxRpm: params.maxRpm,
       throttle: params.throttle,
       driftIntensity: params.driftIntensity,
@@ -264,6 +271,34 @@ class ProceduralSlotSoundEngine {
       stereoPan: 0,
       dopplerFactor: 1.0,
     });
+  }
+
+  public playGearShiftSound(isUpshift: boolean): void {
+    if (
+      this.isMuted ||
+      !this.isInitialized ||
+      !this.ctx ||
+      !this.masterGain ||
+      this.ctx.state !== 'running'
+    ) {
+      return;
+    }
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(isUpshift ? 115 : 165, now);
+    osc.frequency.exponentialRampToValueAtTime(isUpshift ? 52 : 95, now + 0.07);
+
+    gain.gain.setValueAtTime(0.24, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(now);
+    osc.stop(now + 0.085);
   }
 
   /**
