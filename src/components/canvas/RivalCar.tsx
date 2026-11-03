@@ -16,13 +16,81 @@ import {
 } from '@/lib/montmeloSpline';
 import { soundEngine } from '@/lib/soundEngine';
 import { useGarageStore, useTelemetryStore } from '@/store/store';
+import type { TrackId } from '@/types/types';
+
+export interface BossProfile {
+  readonly name: string;
+  readonly cupTitle: string;
+  readonly defaultModelPath: string;
+  readonly altModelPath: string;
+  readonly defaultYawRad: number;
+  readonly altYawRad: number;
+  readonly maxSpeedMs: number;
+  readonly accelMs2: number;
+  readonly cornerAggression: number;
+  readonly canOverpushUnderPressure: boolean;
+}
+
+export const CUP_BOSS_BY_TRACK: Record<TrackId, BossProfile> = {
+  montmelo: {
+    name: 'Kai "Vortex"',
+    cupTitle: 'Copa Bronce · Catalunya',
+    defaultModelPath: '/cars/kenney-sedan-gt.glb',
+    altModelPath: '/cars/sonic-wing.glb',
+    defaultYawRad: Math.PI,
+    altYawRad: 0,
+    maxSpeedMs: 179 / 3.6,
+    accelMs2: 13.1,
+    cornerAggression: 0.91,
+    canOverpushUnderPressure: false,
+  },
+  'sierra-seca': {
+    name: 'Mako "Corkscrew"',
+    cupTitle: 'Copa Plata · Cañón Seca',
+    defaultModelPath: '/cars/apex-supercar.glb',
+    altModelPath: '/cars/phantom-stream.glb',
+    defaultYawRad: 0,
+    altYawRad: 0,
+    maxSpeedMs: 189 / 3.6,
+    accelMs2: 14.3,
+    cornerAggression: 0.955,
+    canOverpushUnderPressure: false,
+  },
+  'neo-wangan': {
+    name: 'Viktor "Midnight"',
+    cupTitle: 'Copa Oro · Shuto C1',
+    defaultModelPath: '/cars/tokyo-gt-turbo.glb',
+    altModelPath: '/cars/cyber-formula.glb',
+    defaultYawRad: 0,
+    altYawRad: 0,
+    maxSpeedMs: 199 / 3.6,
+    accelMs2: 15.5,
+    cornerAggression: 0.985,
+    canOverpushUnderPressure: true,
+  },
+};
+
+/** Estado 0-GC compartido en tiempo real entre PhysicsCar y RivalCar */
+export const liveRivalState = {
+  distanceM: 0,
+  lapCount: 1,
+  totalDistanceM: 0,
+  speedMs: 0,
+  isDerailed: false,
+  bossName: CUP_BOSS_BY_TRACK.montmelo.name,
+  cupTitle: CUP_BOSS_BY_TRACK.montmelo.cupTitle,
+};
+
+export const livePlayerProgress = {
+  distanceM: 0,
+  lapCount: 1,
+  totalDistanceM: 0,
+};
 
 const RIVAL_WEIGHT_KG = 176;
 const RIVAL_BASE_GRIP_N = 7400;
-const RIVAL_AERO_COEFF = 0.55;
-const RIVAL_MAX_SPEED_MS = 186 / 3.6;
-const RIVAL_ACCEL_MS2 = 13.8;
-const RIVAL_BRAKE_MS2 = 34.0;
+const RIVAL_AERO_COEFF = 0.58;
+const RIVAL_BRAKE_MS2 = 34.5;
 
 const _rivalKinematics: SplineKinematicsResult = {
   position: new THREE.Vector3(),
@@ -41,9 +109,10 @@ const _camRightVec = new THREE.Vector3();
 const _rivalVelVec = new THREE.Vector3();
 
 /**
- * Coche Rival / IA sobre el carril paralelo de Scalextric con:
+ * Coche Rival / Jefes IA de la Copa Let's & Go sobre el carril paralelo de Scalextric con:
+ * - 3 Jefes con personalidad propia (Kai en Montmeló, Mako en Sierra Seca, Viktor en Neo-Wangan).
+ * - Salida sincronizada con el Semáforo F1 en Modo Copa 3V.
  * - Audio espacial 3D en tiempo real (paneo estéreo izq/der, atenuación por distancia y Doppler).
- * - Luces de freno traseras activas y chispas en apoyo fuerte.
  */
 export function RivalCar() {
   const groupRef = useRef<THREE.Group>(null);
@@ -54,17 +123,17 @@ export function RivalCar() {
   const resetNonce = useTelemetryStore((s) => s.resetNonce);
   const playerModelPath = useGarageStore((s) => s.carStats.modelPath);
 
+  const boss = CUP_BOSS_BY_TRACK[trackId];
+  const useAltModel = playerModelPath === boss.defaultModelPath;
+  const rivalModelPath = useAltModel
+    ? boss.altModelPath
+    : boss.defaultModelPath;
+  const rivalYawOffsetRad = useAltModel
+    ? boss.altYawRad
+    : boss.defaultYawRad;
+
   const rivalLane = playerLane === 'left' ? 'right' : 'left';
   const rivalLaneOffsetM = getLaneLateralOffsetM(rivalLane);
-
-  const rivalModelPath =
-    trackId === 'neo-wangan'
-      ? playerModelPath === '/cars/tokyo-gt-turbo.glb'
-        ? '/cars/cyber-formula.glb'
-        : '/cars/tokyo-gt-turbo.glb'
-      : playerModelPath === '/cars/sonic-wing.glb'
-        ? '/cars/phantom-stream.glb'
-        : '/cars/sonic-wing.glb';
 
   const curve = useMemo(() => getTrackCurve(trackId), [trackId]);
   const lut = useMemo(() => getTrackLUT(trackId), [trackId]);
@@ -74,6 +143,7 @@ export function RivalCar() {
     bodyRollRad: 0,
     driftYawRad: 0,
     driftIntensity: 0,
+    speedMs: 0,
     brakeIntensity: 0,
     guideStress: 0,
     isDerailed: false,
@@ -81,15 +151,28 @@ export function RivalCar() {
 
   const simRef = useRef({
     distanceM: 0,
+    lapCount: 1,
     speedMs: 0,
     lateralOffsetM: rivalLaneOffsetM,
-    prevDistanceToCamM: 20,
+    derailTimerSec: 0,
+    pressureAccumulatorSec: 0,
   });
 
   useEffect(() => {
     simRef.current.distanceM = 0;
+    simRef.current.lapCount = 1;
     simRef.current.speedMs = 0;
-  }, [trackId, resetNonce]);
+    simRef.current.derailTimerSec = 0;
+    simRef.current.pressureAccumulatorSec = 0;
+
+    liveRivalState.distanceM = 0;
+    liveRivalState.lapCount = 1;
+    liveRivalState.totalDistanceM = 0;
+    liveRivalState.speedMs = 0;
+    liveRivalState.isDerailed = false;
+    liveRivalState.bossName = boss.name;
+    liveRivalState.cupTitle = boss.cupTitle;
+  }, [trackId, resetNonce, boss.name, boss.cupTitle]);
 
   useEffect(() => {
     if (!rivalEnabled) {
@@ -111,12 +194,73 @@ export function RivalCar() {
 
     const dt = Math.min(rawDelta, 0.05);
     const sim = simRef.current;
+    const telemetry = useTelemetryStore.getState();
+    const isRain = telemetry.weatherMode === 'rain';
+    const wetGripScale = isRain ? 0.86 : 1.0;
 
     sim.lateralOffsetM = THREE.MathUtils.lerp(
       sim.lateralOffsetM,
       rivalLaneOffsetM,
       1 - Math.exp(-10 * dt)
     );
+
+    // En Modo Copa durante la cuenta atrás del semáforo, el rival permanece parado en parrilla
+    const waitingAtStartGrid =
+      telemetry.raceMode === 'cup' && telemetry.cupStartPhase === 'countdown';
+
+    if (waitingAtStartGrid) {
+      sim.distanceM = 0;
+      sim.lapCount = 1;
+      sim.speedMs = 0;
+      evaluateSplineKinematics(curve, 0, _rivalKinematics);
+      _rivalPos
+        .copy(_rivalKinematics.position)
+        .addScaledVector(_rivalKinematics.right, sim.lateralOffsetM);
+      _rivalLook.copy(_rivalPos).add(_rivalKinematics.tangent);
+      group.position.copy(_rivalPos);
+      group.up.copy(_worldUp);
+      group.lookAt(_rivalLook);
+      soundEngine.silenceRival();
+      return;
+    }
+
+    // Gestión de micro-descarrilamiento por presión cuando acosas a Viktor en Neo-Wangan
+    if (sim.derailTimerSec > 0) {
+      sim.derailTimerSec -= dt;
+      sim.speedMs = Math.max(0, sim.speedMs - 24 * dt);
+      rivalMotionRef.current.isDerailed = true;
+      rivalMotionRef.current.speedMs = sim.speedMs;
+      group.rotateY(4.2 * dt);
+      liveRivalState.isDerailed = true;
+      liveRivalState.speedMs = sim.speedMs;
+      if (sim.derailTimerSec <= 0) {
+        rivalMotionRef.current.isDerailed = false;
+        liveRivalState.isDerailed = false;
+      }
+      return;
+    }
+
+    // Comprobar si el jugador está presionando muy de cerca al rival (< 7.5 m)
+    const rivalTotalDist =
+      (sim.lapCount - 1) * trackLengthM + sim.distanceM;
+    const gapAheadOfPlayer =
+      rivalTotalDist - livePlayerProgress.totalDistanceM;
+    const isUnderClosePressure =
+      gapAheadOfPlayer > -2 && gapAheadOfPlayer < 8.5;
+
+    if (isUnderClosePressure && boss.canOverpushUnderPressure) {
+      sim.pressureAccumulatorSec += dt;
+    } else {
+      sim.pressureAccumulatorSec = Math.max(
+        0,
+        sim.pressureAccumulatorSec - dt * 0.5
+      );
+    }
+
+    const activeCornerAggression =
+      isUnderClosePressure && boss.canOverpushUnderPressure
+        ? boss.cornerAggression + 0.055
+        : boss.cornerAggression;
 
     let mustBrake = false;
     let shouldCoast = false;
@@ -132,9 +276,9 @@ export function RivalCar() {
         computeCornerLimitSpeedMs(
           effR,
           RIVAL_WEIGHT_KG,
-          RIVAL_BASE_GRIP_N,
+          RIVAL_BASE_GRIP_N * wetGripScale,
           RIVAL_AERO_COEFF
-        ) * 0.95;
+        ) * activeCornerAggression;
 
       if (!Number.isFinite(safeApexSpeed)) continue;
 
@@ -166,14 +310,14 @@ export function RivalCar() {
     } else if (shouldCoast) {
       netAccel -= 6.5;
     } else {
-      const ratio = sim.speedMs / RIVAL_MAX_SPEED_MS;
-      netAccel += RIVAL_ACCEL_MS2 * Math.max(0, 1 - Math.pow(ratio, 2.3));
+      const ratio = sim.speedMs / boss.maxSpeedMs;
+      netAccel += boss.accelMs2 * Math.max(0, 1 - Math.pow(ratio, 2.3));
     }
 
     sim.speedMs = THREE.MathUtils.clamp(
       sim.speedMs + netAccel * dt,
       0,
-      RIVAL_MAX_SPEED_MS
+      boss.maxSpeedMs
     );
 
     const curEffR = computeEffectiveLaneRadius(
@@ -191,9 +335,20 @@ export function RivalCar() {
           )
         : 1.0;
 
+    const nextDistance = sim.distanceM + sim.speedMs * arcScale * dt;
+    if (nextDistance >= trackLengthM) {
+      if (
+        telemetry.raceMode === 'cup' &&
+        telemetry.cupStartPhase === 'green' &&
+        sim.lapCount >= telemetry.cupTargetLaps
+      ) {
+        telemetry.finishCupRace('rival');
+      }
+      sim.lapCount += 1;
+    }
+
     sim.distanceM =
-      (sim.distanceM + sim.speedMs * arcScale * dt + trackLengthM) %
-      trackLengthM;
+      ((nextDistance % trackLengthM) + trackLengthM) % trackLengthM;
 
     const u = sim.distanceM / trackLengthM;
     evaluateSplineKinematics(curve, u, _rivalKinematics);
@@ -216,18 +371,30 @@ export function RivalCar() {
       ? (RIVAL_WEIGHT_KG * sim.speedMs * sim.speedMs) / postEffR
       : 0;
     const dynGrip =
-      RIVAL_BASE_GRIP_N + RIVAL_AERO_COEFF * sim.speedMs * sim.speedMs;
+      RIVAL_BASE_GRIP_N * wetGripScale +
+      RIVAL_AERO_COEFF * sim.speedMs * sim.speedMs;
     const gripRatio = dynGrip > 0 ? fc / dynGrip : 0;
-    const driftInt = THREE.MathUtils.clamp((gripRatio - 0.85) / 0.42, 0, 0.85);
+    const driftInt = THREE.MathUtils.clamp((gripRatio - 0.85) / 0.42, 0, 0.88);
+
+    // Si Viktor acumula demasiada presión en una curva cerrada, puede derrapar de más y salirse 1.25 s
+    if (
+      boss.canOverpushUnderPressure &&
+      sim.pressureAccumulatorSec > 2.2 &&
+      gripRatio > 1.06
+    ) {
+      sim.derailTimerSec = 1.25;
+      sim.pressureAccumulatorSec = 0;
+      soundEngine.playDerailSound();
+    }
 
     const vis = rivalMotionRef.current;
     vis.speedMs = sim.speedMs;
     vis.driftIntensity = driftInt;
     vis.brakeIntensity = mustBrake ? 1 : 0;
-    vis.guideStress = gripRatio > 0.92 ? (gripRatio - 0.92) * 3.0 : 0;
+    vis.guideStress = gripRatio > 0.9 ? (gripRatio - 0.9) * 3.2 : 0;
     vis.driftYawRad = THREE.MathUtils.lerp(
       vis.driftYawRad,
-      -_rivalKinematics.turnSign * driftInt * 0.42,
+      -_rivalKinematics.turnSign * driftInt * 0.44,
       1 - Math.exp(-12 * dt)
     );
     vis.bodyRollRad = THREE.MathUtils.lerp(
@@ -235,6 +402,14 @@ export function RivalCar() {
       -_rivalKinematics.turnSign * Math.min(1.1, gripRatio) * 0.13,
       1 - Math.exp(-12 * dt)
     );
+
+    liveRivalState.distanceM = sim.distanceM;
+    liveRivalState.lapCount = sim.lapCount;
+    liveRivalState.totalDistanceM =
+      (sim.lapCount - 1) * trackLengthM + sim.distanceM;
+    liveRivalState.speedMs = sim.speedMs;
+    liveRivalState.bossName = boss.name;
+    liveRivalState.cupTitle = boss.cupTitle;
 
     // Espacialización 3D del audio respecto a la cámara activa
     _toRivalVec.subVectors(_rivalPos, state.camera.position);
@@ -247,12 +422,11 @@ export function RivalCar() {
     _rivalVelVec
       .copy(_rivalKinematics.tangent)
       .multiplyScalar(sim.speedMs);
-    // Velocidad radial de acercamiento (>0 si se acerca a la cámara, <0 si se aleja)
     const radialClosingSpeed = -_rivalVelVec.dot(_toRivalVec);
 
     soundEngine.updateRivalSpatialFrame({
       speedMs: sim.speedMs,
-      maxSpeedMs: RIVAL_MAX_SPEED_MS,
+      maxSpeedMs: boss.maxSpeedMs,
       throttle: aiThrottle,
       driftIntensity: driftInt,
       distanceToListenerM: distToCam,
@@ -266,7 +440,11 @@ export function RivalCar() {
 
   return (
     <group ref={groupRef} name="rival-slot-car">
-      <CarModel modelPath={rivalModelPath} motionRef={rivalMotionRef} />
+      <CarModel
+        modelPath={rivalModelPath}
+        modelYawOffsetRad={rivalYawOffsetRad}
+        motionRef={rivalMotionRef}
+      />
     </group>
   );
 }

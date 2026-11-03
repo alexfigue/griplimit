@@ -93,6 +93,12 @@ export function useControls(): React.RefObject<DriverControlInputs> {
         case 'KeyG':
           useTelemetryStore.getState().toggleGhost();
           break;
+        case 'KeyB':
+          useTelemetryStore.getState().triggerOverVolt();
+          break;
+        case 'KeyV':
+          useTelemetryStore.getState().toggleWeatherMode();
+          break;
       }
     };
 

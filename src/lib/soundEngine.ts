@@ -441,6 +441,90 @@ class ProceduralSlotSoundEngine {
       osc.stop(start + 0.25);
     });
   }
+
+  public playCountdownBeep(isGreenGo: boolean): void {
+    if (
+      this.isMuted ||
+      !this.isInitialized ||
+      !this.ctx ||
+      !this.masterGain ||
+      this.ctx.state !== 'running'
+    ) {
+      return;
+    }
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = isGreenGo ? 'triangle' : 'sine';
+    osc.frequency.setValueAtTime(isGreenGo ? 880 : 440, now);
+
+    const duration = isGreenGo ? 0.34 : 0.14;
+    gain.gain.setValueAtTime(isGreenGo ? 0.32 : 0.22, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(now);
+    osc.stop(now + duration + 0.01);
+  }
+
+  public playFalseStartBuzzer(): void {
+    if (
+      this.isMuted ||
+      !this.isInitialized ||
+      !this.ctx ||
+      !this.masterGain ||
+      this.ctx.state !== 'running'
+    ) {
+      return;
+    }
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(135, now);
+    osc.frequency.setValueAtTime(110, now + 0.14);
+
+    gain.gain.setValueAtTime(0.36, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(now);
+    osc.stop(now + 0.36);
+  }
+
+  public playOverVoltSound(): void {
+    if (
+      this.isMuted ||
+      !this.isInitialized ||
+      !this.ctx ||
+      !this.masterGain ||
+      this.ctx.state !== 'running'
+    ) {
+      return;
+    }
+
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(340, now);
+    osc.frequency.exponentialRampToValueAtTime(1720, now + 0.32);
+
+    gain.gain.setValueAtTime(0.28, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain);
+    osc.start(now);
+    osc.stop(now + 0.37);
+  }
 }
 
 export const soundEngine = new ProceduralSlotSoundEngine();

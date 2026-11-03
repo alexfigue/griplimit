@@ -6,6 +6,10 @@ import * as THREE from 'three';
 import { CarModel, type CarVisualMotionState } from '@/components/canvas/CarModel';
 import { PredictiveBrakingLine } from '@/components/canvas/PredictiveBrakingLine';
 import {
+  livePlayerProgress,
+  liveRivalState,
+} from '@/components/canvas/RivalCar';
+import {
   SkidmarksRibbon,
   type SkidmarkEmitterState,
 } from '@/components/canvas/SkidmarksRibbon';
@@ -62,6 +66,14 @@ interface InternalPhysicsState {
   sectorStage: 0 | 1 | 2;
   sectorSplitStartMs: number;
   purpleSectorsInLap: number;
+  countdownStepTimerSec: number;
+  lightsOutHoldDurationSec: number;
+  greenElapsedSec: number;
+  jumpedStartArmed: boolean;
+  falseStartPenaltyTimerSec: number;
+  turboStartTimerSec: number;
+  overVoltCharge: number;
+  overVoltTimerSec: number;
   uiSyncAccumulatorSec: number;
 }
 
@@ -81,10 +93,10 @@ const _desiredCamLook = new THREE.Vector3();
 const _worldUp = new THREE.Vector3(0, 1, 0);
 
 /**
- * Motor físico del jugador v1.0 con:
- * - Doble carril paralelo + gravedad longitudinal en cuestas + downforce aerodinámico.
- * - Cronometraje oficial por Sectores F1 (S1, S2, S3), evaluación de Vuelta Perfecta / Maestro del Derrape y GP.
- * - Grabación 0-GC a 20 Hz del Coche Fantasma (Ghost Replay) sobre Float32Array.
+ * Motor físico del jugador v2.0 con:
+ * - Doble carril paralelo + gravedad longitudinal en cuestas + downforce aerodinámico + Clima Lluvia/Seco.
+ * - Semáforo F1 de 5 luces (Salida Nula / Salida Turbo), Rebufo aerodinámico y Descarga OverVolt 18V [B].
+ * - Cronometraje oficial por Sectores F1 (S1, S2, S3), Modo Copa 3V y Ghost Car 0-GC.
  */
 export function PhysicsCar() {
   const carGroupRef = useRef<THREE.Group>(null);
@@ -94,9 +106,13 @@ export function PhysicsCar() {
   );
 
   const carStats = useGarageStore((state) => state.carStats);
+  const activeTireId = useGarageStore((state) => state.loadout.tiresId);
   const trackId = useTelemetryStore((state) => state.trackId);
   const playerLane = useTelemetryStore((state) => state.playerLane);
   const resetNonce = useTelemetryStore((state) => state.resetNonce);
+  const overVoltTriggerNonce = useTelemetryStore(
+    (state) => state.overVoltTriggerNonce
+  );
 
   const curve = useMemo(() => getTrackCurve(trackId), [trackId]);
   const trackLUT = useMemo(() => getTrackLUT(trackId), [trackId]);
@@ -109,8 +125,10 @@ export function PhysicsCar() {
     bodyRollRad: 0,
     driftYawRad: 0,
     driftIntensity: 0,
+    speedMs: 0,
     brakeIntensity: 0,
     guideStress: 0,
+    overVoltActive: false,
     isDerailed: false,
   });
 
@@ -140,6 +158,14 @@ export function PhysicsCar() {
     sectorStage: 0,
     sectorSplitStartMs: 0,
     purpleSectorsInLap: 0,
+    countdownStepTimerSec: 0,
+    lightsOutHoldDurationSec: 0.68,
+    greenElapsedSec: 99,
+    jumpedStartArmed: false,
+    falseStartPenaltyTimerSec: 0,
+    turboStartTimerSec: 0,
+    overVoltCharge: 0.45,
+    overVoltTimerSec: 0,
     uiSyncAccumulatorSec: 0,
   });
 
@@ -150,12 +176,35 @@ export function PhysicsCar() {
       .setTrackId(useTelemetryStore.getState().trackId);
   }, []);
 
+  // Activación de descarga OverVolt 18V [Tecla B / Botón HUD]
+  const prevOverVoltNonceRef = useRef(overVoltTriggerNonce);
+  useEffect(() => {
+    if (prevOverVoltNonceRef.current === overVoltTriggerNonce) return;
+    prevOverVoltNonceRef.current = overVoltTriggerNonce;
+
+    const sim = physicsRef.current;
+    if (
+      sim.overVoltCharge >= 0.99 &&
+      sim.overVoltTimerSec <= 0 &&
+      !sim.isDerailed
+    ) {
+      sim.overVoltCharge = 0;
+      sim.overVoltTimerSec = 2.5;
+      soundEngine.unlock();
+      soundEngine.playOverVoltSound();
+    }
+  }, [overVoltTriggerNonce]);
+
   const prevTrackRef = useRef(trackId);
   useEffect(() => {
     const sim = physicsRef.current;
     const vis = visualMotionRef.current;
+    const telemetry = useTelemetryStore.getState();
 
-    if (prevTrackRef.current !== trackId) {
+    const isCupStartReset =
+      telemetry.raceMode === 'cup' && telemetry.cupStartPhase === 'countdown';
+
+    if (prevTrackRef.current !== trackId || isCupStartReset) {
       prevTrackRef.current = trackId;
       sim.distanceM = 0;
       sim.lapCount = 1;
@@ -166,11 +215,22 @@ export function PhysicsCar() {
       sim.sectorStage = 0;
       sim.sectorSplitStartMs = 0;
       sim.purpleSectorsInLap = 0;
+      sim.countdownStepTimerSec = 0;
+      sim.lightsOutHoldDurationSec = 0.55 + Math.random() * 0.38;
+      sim.greenElapsedSec = isCupStartReset ? 0 : 99;
+      sim.jumpedStartArmed = false;
+      sim.falseStartPenaltyTimerSec = 0;
+      sim.turboStartTimerSec = 0;
+      if (isCupStartReset) {
+        sim.overVoltCharge = 0.5;
+        sim.overVoltTimerSec = 0;
+        soundEngine.unlock();
+        soundEngine.playCountdownBeep(false);
+      }
       ghostBufferRef.current.reset();
       liveLapClock.elapsedMs = 0;
       liveLapClock.active = false;
     } else if (sim.lapTimeMs > 500 && !sim.isDerailed) {
-      // Si el piloto fuerza reencarrilado manual en mitad de vuelta cuenta como incidencia
       sim.derailCountInLap += 1;
     }
 
@@ -183,8 +243,10 @@ export function PhysicsCar() {
     vis.bodyRollRad = 0;
     vis.driftYawRad = 0;
     vis.driftIntensity = 0;
+    vis.speedMs = 0;
     vis.brakeIntensity = 0;
     vis.guideStress = 0;
+    vis.overVoltActive = false;
     vis.isDerailed = false;
     setIsDerailedVisual(false);
   }, [resetNonce, trackId]);
@@ -196,8 +258,98 @@ export function PhysicsCar() {
     const dt = Math.min(rawDelta, 0.05);
     const sim = physicsRef.current;
     const vis = visualMotionRef.current;
+    const telemetryState = useTelemetryStore.getState();
     const { throttle: rawThrottle, brake } = controlsRef.current;
-    const maxSpeedMs = carStats.MaxSpeed / 3.6;
+
+    const isRain = telemetryState.weatherMode === 'rain';
+    const wetTireFactor = isRain
+      ? activeTireId === 'tir_wet_rain'
+        ? 0.96
+        : 0.78
+      : 1.0;
+
+    let forceImmediateHudSync = false;
+
+    // 1. Secuencia del Semáforo F1 de 5 luces en Modo Copa 3V
+    if (
+      telemetryState.raceMode === 'cup' &&
+      telemetryState.cupStartPhase === 'countdown'
+    ) {
+      sim.countdownStepTimerSec += dt;
+
+      if (rawThrottle > 0.1 && telemetryState.countdownLights >= 3) {
+        sim.jumpedStartArmed = true;
+      } else if (rawThrottle === 0) {
+        sim.jumpedStartArmed = false;
+      }
+
+      if (telemetryState.countdownLights < 5) {
+        if (sim.countdownStepTimerSec >= 0.62) {
+          sim.countdownStepTimerSec = 0;
+          const nextLight = (telemetryState.countdownLights + 1) as
+            | 1
+            | 2
+            | 3
+            | 4
+            | 5;
+          telemetryState.setCupCountdownState('countdown', nextLight);
+          soundEngine.playCountdownBeep(false);
+          forceImmediateHudSync = true;
+        }
+      } else if (sim.countdownStepTimerSec >= sim.lightsOutHoldDurationSec) {
+        sim.countdownStepTimerSec = 0;
+        sim.greenElapsedSec = 0;
+        telemetryState.setCupCountdownState('green', 0);
+
+        if (sim.jumpedStartArmed || rawThrottle > 0.1) {
+          sim.falseStartPenaltyTimerSec = 1.25;
+          soundEngine.playFalseStartBuzzer();
+        } else {
+          soundEngine.playCountdownBeep(true);
+        }
+        forceImmediateHudSync = true;
+      }
+    } else if (telemetryState.cupStartPhase === 'green') {
+      sim.greenElapsedSec += dt;
+      // Detección de Salida Perfecta Turbo si clavas el gatillo en los primeros 0.28s tras apagarse el semáforo
+      if (
+        sim.greenElapsedSec <= 0.28 &&
+        rawThrottle > 0.1 &&
+        sim.falseStartPenaltyTimerSec <= 0 &&
+        sim.turboStartTimerSec <= 0 &&
+        sim.speedMs < 2.5
+      ) {
+        sim.turboStartTimerSec = 1.85;
+        sim.overVoltCharge = Math.min(1, sim.overVoltCharge + 0.25);
+        soundEngine.playOverVoltSound();
+        forceImmediateHudSync = true;
+      }
+    }
+
+    if (sim.falseStartPenaltyTimerSec > 0) {
+      sim.falseStartPenaltyTimerSec = Math.max(
+        0,
+        sim.falseStartPenaltyTimerSec - dt
+      );
+    }
+    if (sim.turboStartTimerSec > 0) {
+      sim.turboStartTimerSec = Math.max(0, sim.turboStartTimerSec - dt);
+    }
+    if (sim.overVoltTimerSec > 0) {
+      sim.overVoltTimerSec = Math.max(0, sim.overVoltTimerSec - dt);
+    }
+
+    const isWaitingAtGrid =
+      telemetryState.raceMode === 'cup' &&
+      telemetryState.cupStartPhase === 'countdown';
+    const isFalseStartStalled = sim.falseStartPenaltyTimerSec > 0;
+    const isOverVoltActive = sim.overVoltTimerSec > 0;
+    const isTurboStartActive = sim.turboStartTimerSec > 0;
+
+    vis.overVoltActive = isOverVoltActive || isTurboStartActive;
+
+    const effectiveRawThrottle =
+      isWaitingAtGrid || isFalseStartStalled ? 0 : rawThrottle;
 
     sim.lateralOffsetM = THREE.MathUtils.lerp(
       sim.lateralOffsetM,
@@ -205,24 +357,55 @@ export function PhysicsCar() {
       1 - Math.exp(-12 * dt)
     );
 
-    const throttleRate = rawThrottle > sim.smoothedThrottle ? 15.0 : 34.0;
+    const throttleRate =
+      effectiveRawThrottle > sim.smoothedThrottle ? 15.0 : 34.0;
     sim.smoothedThrottle = THREE.MathUtils.lerp(
       sim.smoothedThrottle,
-      rawThrottle,
+      effectiveRawThrottle,
       1 - Math.exp(-throttleRate * dt)
     );
-    if (sim.smoothedThrottle < 0.01 && rawThrottle === 0) {
+    if (sim.smoothedThrottle < 0.01 && effectiveRawThrottle === 0) {
       sim.smoothedThrottle = 0;
     }
 
     vis.brakeIntensity = brake;
 
+    // 2. Cálculo de Rebufo Aerodinámico (Slipstream) tras el rival
+    const playerTotalDist =
+      (sim.lapCount - 1) * trackLengthM + sim.distanceM;
+    livePlayerProgress.distanceM = sim.distanceM;
+    livePlayerProgress.lapCount = sim.lapCount;
+    livePlayerProgress.totalDistanceM = playerTotalDist;
+
+    let distBehindRivalOnLoop =
+      (liveRivalState.distanceM - sim.distanceM + trackLengthM) % trackLengthM;
+    if (distBehindRivalOnLoop > trackLengthM * 0.5) {
+      distBehindRivalOnLoop -= trackLengthM;
+    }
+
+    const isSlipstreaming =
+      telemetryState.rivalEnabled &&
+      !isWaitingAtGrid &&
+      !sim.isDerailed &&
+      sim.speedMs > 11 &&
+      distBehindRivalOnLoop > 1.8 &&
+      distBehindRivalOnLoop < 15.0;
+
+    if (isSlipstreaming && !isOverVoltActive) {
+      sim.overVoltCharge = Math.min(1, sim.overVoltCharge + 0.16 * dt);
+    }
+
+    const baseMaxSpeedMs = carStats.MaxSpeed / 3.6;
+    const maxSpeedMultiplier =
+      (isOverVoltActive ? 1.14 : 1.0) * (isSlipstreaming ? 1.05 : 1.0);
+    const maxSpeedMs = baseMaxSpeedMs * maxSpeedMultiplier;
+
     let currentCentrifugalForceN = 0;
     let currentEffectiveRadiusM = Infinity;
-    let currentDynamicGripN = computeDynamicGripAtSpeed(carStats, sim.speedMs);
+    let currentDynamicGripN =
+      computeDynamicGripAtSpeed(carStats, sim.speedMs) * wetTireFactor;
     let gripRatio = 0;
     let slopePercent = 0;
-    let forceImmediateHudSync = false;
 
     if (!sim.isDerailed) {
       const prevU = sim.distanceM / trackLengthM;
@@ -251,19 +434,29 @@ export function PhysicsCar() {
       const powerBandFactor = Math.max(0, 1 - Math.pow(speedRatio, 2.4));
       const rearTractionEfficiency = 1 - 0.45 * preDriftIntensity;
 
+      const boostAccelMult =
+        (isOverVoltActive ? 1.28 : 1.0) *
+        (isTurboStartActive ? 1.28 : 1.0) *
+        (isSlipstreaming ? 1.12 : 1.0);
+
       const driveAccel =
         sim.smoothedThrottle *
         carStats.Acceleration *
+        boostAccelMult *
         powerBandFactor *
         rearTractionEfficiency;
 
       const brakeDecel = brake * SLOT_BRAKE_DECEL_MS2;
+      const effectiveDragCoeff = isSlipstreaming
+        ? AERO_DRAG_COEFF * 0.65
+        : AERO_DRAG_COEFF;
       const coastDecel =
-        rawThrottle === 0 && sim.speedMs > 0
-          ? ENGINE_COAST_BRAKE_MS2 + AERO_DRAG_COEFF * sim.speedMs * sim.speedMs
-          : AERO_DRAG_COEFF * sim.speedMs * sim.speedMs;
+        effectiveRawThrottle === 0 && sim.speedMs > 0
+          ? ENGINE_COAST_BRAKE_MS2 +
+            effectiveDragCoeff * sim.speedMs * sim.speedMs
+          : effectiveDragCoeff * sim.speedMs * sim.speedMs;
 
-      const scrubFactor = rawThrottle === 0 ? 1.0 : 0.45;
+      const scrubFactor = effectiveRawThrottle === 0 ? 1.0 : 0.45;
       const driftScrubDecel =
         preDriftIntensity * DRIFT_TIRE_SCRUB_DECEL_MS2 * scrubFactor;
 
@@ -276,11 +469,13 @@ export function PhysicsCar() {
 
       const downhillMaxCap =
         _kinematics.tangent.y < -0.05 ? maxSpeedMs * 1.06 : maxSpeedMs;
-      sim.speedMs = THREE.MathUtils.clamp(
-        sim.speedMs + netLongitudinalAccel * dt,
-        0,
-        downhillMaxCap
-      );
+      sim.speedMs = isWaitingAtGrid
+        ? 0
+        : THREE.MathUtils.clamp(
+            sim.speedMs + netLongitudinalAccel * dt,
+            0,
+            downhillMaxCap
+          );
 
       const arcDifferentialFactor =
         Number.isFinite(_kinematics.curvatureRadius) &&
@@ -292,7 +487,7 @@ export function PhysicsCar() {
             )
           : 1.0;
 
-      if (sim.speedMs > 0.1 || sim.lapTimeMs > 0) {
+      if (!isWaitingAtGrid && (sim.speedMs > 0.1 || sim.lapTimeMs > 0)) {
         sim.lapTimeMs += dt * 1000;
       }
 
@@ -325,7 +520,7 @@ export function PhysicsCar() {
         }
       }
 
-      // Cruce por Línea de Meta (Sector 3 + Evaluación de Vuelta + Guardado de Ghost)
+      // Cruce por Línea de Meta (Sector 3 + Evaluación de Vuelta + Guardado de Ghost + Copa 3V)
       if (nextDistance >= trackLengthM) {
         if (sim.lapTimeMs > 4000) {
           if (sim.sectorStage === 2) {
@@ -361,7 +556,14 @@ export function PhysicsCar() {
             useTelemetryStore.getState().bumpGhostVersion();
           }
 
-          if (summary.medal === 'perfect') {
+          if (
+            telemetryState.raceMode === 'cup' &&
+            telemetryState.cupStartPhase === 'green' &&
+            sim.lapCount >= telemetryState.cupTargetLaps
+          ) {
+            telemetryState.finishCupRace('player');
+            soundEngine.playPerfectLapFanfare();
+          } else if (summary.medal === 'perfect') {
             soundEngine.playPerfectLapFanfare();
           } else {
             soundEngine.playLapChime(summary.isNewBest);
@@ -392,7 +594,8 @@ export function PhysicsCar() {
         _kinematics.turnSign,
         sim.lateralOffsetM
       );
-      currentDynamicGripN = computeDynamicGripAtSpeed(carStats, sim.speedMs);
+      currentDynamicGripN =
+        computeDynamicGripAtSpeed(carStats, sim.speedMs) * wetTireFactor;
 
       currentCentrifugalForceN = Number.isFinite(currentEffectiveRadiusM)
         ? (carStats.TotalWeight * (sim.speedMs * sim.speedMs)) /
@@ -412,6 +615,12 @@ export function PhysicsCar() {
 
       if (driftIntensity > 0.12 && sim.speedMs > 5) {
         sim.driftScoreSecInLap += dt;
+        if (!isOverVoltActive) {
+          sim.overVoltCharge = Math.min(
+            1,
+            sim.overVoltCharge + driftIntensity * 0.22 * dt
+          );
+        }
       }
 
       if (gripRatio >= carStats.DriftCeilingRatio) {
@@ -447,6 +656,7 @@ export function PhysicsCar() {
         sim.derailCountInLap += 1;
         sim.derailTimerSec = DERAIL_RECOVERY_SECONDS;
         sim.peakDerailForceN = currentCentrifugalForceN;
+        sim.overVoltTimerSec = 0;
 
         sim.derailPosition.copy(_laneWorldPos);
         sim.derailVelocity
@@ -487,7 +697,6 @@ export function PhysicsCar() {
     }
 
     if (sim.isDerailed) {
-      // El cronómetro de la vuelta sigue corriendo durante la recuperación del descarrilamiento
       if (sim.lapTimeMs > 0) {
         sim.lapTimeMs += dt * 1000;
       }
@@ -540,14 +749,13 @@ export function PhysicsCar() {
       );
     }
 
-    // Puente 0-GC para el emisor de marcas de neumáticos en el asfalto
+    // Puente 0-GC para rotación de las 4 ruedas y marcas de neumáticos
     vis.speedMs = sim.speedMs;
     skidEmitterRef.current.carGroup = carGroup;
     skidEmitterRef.current.driftYawRad = vis.driftYawRad;
     skidEmitterRef.current.driftIntensity = vis.driftIntensity;
     skidEmitterRef.current.isDerailed = sim.isDerailed;
 
-    const telemetryState = useTelemetryStore.getState();
     const isGarageOpen = useGarageStore.getState().isGarageOpen;
     soundEngine.updateContinuousFrame({
       speedMs: sim.speedMs,
@@ -559,7 +767,7 @@ export function PhysicsCar() {
       soundEnabled: telemetryState.soundEnabled,
     });
 
-    // Cámara dinámica: Showroom 360° en Garaje, Chase Cam con FOV sensible a velocidad, o Vista Cenital
+    // Cámara dinámica: Showroom 360° en Garaje, Chase Cam con FOV sensible a velocidad/OverVolt, o Vista Cenital
     const perspCam = state.camera as THREE.PerspectiveCamera;
     if (isGarageOpen) {
       const orbitAngle = state.clock.elapsedTime * 0.55;
@@ -613,9 +821,12 @@ export function PhysicsCar() {
 
       if (perspCam.isPerspectiveCamera) {
         const speedNorm =
-          maxSpeedMs > 0 ? Math.min(1, sim.speedMs / maxSpeedMs) : 0;
+          baseMaxSpeedMs > 0 ? Math.min(1.15, sim.speedMs / baseMaxSpeedMs) : 0;
+        const overVoltFovExtra = isOverVoltActive ? 4.2 : 0;
         const targetFov =
-          BASE_CAMERA_FOV + Math.pow(speedNorm, 1.6) * MAX_SPEED_FOV_BOOST;
+          BASE_CAMERA_FOV +
+          Math.pow(speedNorm, 1.5) * MAX_SPEED_FOV_BOOST +
+          overVoltFovExtra;
         if (Math.abs(perspCam.fov - targetFov) > 0.03) {
           perspCam.fov = THREE.MathUtils.lerp(
             perspCam.fov,
@@ -655,12 +866,16 @@ export function PhysicsCar() {
               sim.distanceM,
               sim.speedMs,
               carStats.TotalWeight,
-              carStats.TotalGrip,
-              carStats.AeroDownforceCoeff,
+              carStats.TotalGrip * wetTireFactor,
+              carStats.AeroDownforceCoeff * wetTireFactor,
               sim.lateralOffsetM
             );
 
       const driftDeg = Math.abs(THREE.MathUtils.radToDeg(vis.driftYawRad));
+      const updatedPlayerTotal =
+        (sim.lapCount - 1) * trackLengthM + sim.distanceM;
+      const gapToRivalM = updatedPlayerTotal - liveRivalState.totalDistanceM;
+      const playerRacePosition: 1 | 2 = gapToRivalM >= -0.2 ? 1 : 2;
 
       telemetryState.updateTelemetry({
         speedMs: sim.speedMs,
@@ -682,6 +897,14 @@ export function PhysicsCar() {
         lastDerailForce: sim.peakDerailForceN,
         throttleInput: sim.smoothedThrottle,
         brakeInput: brake,
+        slipstreamActive: isSlipstreaming,
+        overVoltCharge: sim.overVoltCharge,
+        overVoltActive: isOverVoltActive,
+        falseStartPenalty: isFalseStartStalled,
+        turboStartActive: isTurboStartActive,
+        gapToRivalM,
+        playerRacePosition,
+        rivalLapCount: liveRivalState.lapCount,
       });
     }
   });

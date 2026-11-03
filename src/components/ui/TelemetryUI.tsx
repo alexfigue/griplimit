@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { CUP_BOSS_BY_TRACK } from '@/components/canvas/RivalCar';
 import { GaragePanel } from '@/components/ui/GaragePanel';
 import { setPointerBrake, setPointerThrottle } from '@/hooks/useControls';
 import { CIRCUITS } from '@/lib/montmeloSpline';
@@ -72,8 +73,8 @@ function getMedalBannerClasses(medal: LapMedalGrade): {
 }
 
 /**
- * HUD unificado v1.0 de Telemetría, 3 Circuitos, Sectores F1 (S1/S2/S3),
- * Medallas de Vuelta Perfecta, Ghost Car [G], Opciones de Pista y Garaje.
+ * HUD unificado v2.0 de Telemetría, Modo Copa 3V (Semáforo F1 + Jefes IA),
+ * Rebufo + Descarga OverVolt 18V [B], Clima Dinámico [V], 3 Circuitos, Sectores F1 y Garaje.
  */
 export function TelemetryUI() {
   const trackId = useTelemetryStore((s) => s.trackId);
@@ -84,6 +85,14 @@ export function TelemetryUI() {
   const soundEnabled = useTelemetryStore((s) => s.soundEnabled);
   const cameraMode = useTelemetryStore((s) => s.cameraMode);
   const environmentStyle = useTelemetryStore((s) => s.environmentStyle);
+  const weatherMode = useTelemetryStore((s) => s.weatherMode);
+
+  const raceMode = useTelemetryStore((s) => s.raceMode);
+  const cupStartPhase = useTelemetryStore((s) => s.cupStartPhase);
+  const countdownLights = useTelemetryStore((s) => s.countdownLights);
+  const cupTargetLaps = useTelemetryStore((s) => s.cupTargetLaps);
+  const cupWinner = useTelemetryStore((s) => s.cupWinner);
+  const cupRewardGp = useTelemetryStore((s) => s.cupRewardGp);
 
   const speedKmh = useTelemetryStore((s) => s.speedKmh);
   const centrifugalForce = useTelemetryStore((s) => s.centrifugalForce);
@@ -109,7 +118,19 @@ export function TelemetryUI() {
   const throttleInput = useTelemetryStore((s) => s.throttleInput);
   const brakeInput = useTelemetryStore((s) => s.brakeInput);
 
+  const slipstreamActive = useTelemetryStore((s) => s.slipstreamActive);
+  const overVoltCharge = useTelemetryStore((s) => s.overVoltCharge);
+  const overVoltActive = useTelemetryStore((s) => s.overVoltActive);
+  const falseStartPenalty = useTelemetryStore((s) => s.falseStartPenalty);
+  const turboStartActive = useTelemetryStore((s) => s.turboStartActive);
+  const gapToRivalM = useTelemetryStore((s) => s.gapToRivalM);
+  const playerRacePosition = useTelemetryStore((s) => s.playerRacePosition);
+
   const setTrackId = useTelemetryStore((s) => s.setTrackId);
+  const startCupRace = useTelemetryStore((s) => s.startCupRace);
+  const exitCupRace = useTelemetryStore((s) => s.exitCupRace);
+  const triggerOverVolt = useTelemetryStore((s) => s.triggerOverVolt);
+  const toggleWeatherMode = useTelemetryStore((s) => s.toggleWeatherMode);
   const togglePlayerLane = useTelemetryStore((s) => s.togglePlayerLane);
   const toggleRival = useTelemetryStore((s) => s.toggleRival);
   const toggleGhost = useTelemetryStore((s) => s.toggleGhost);
@@ -123,6 +144,9 @@ export function TelemetryUI() {
 
   const maxSpeedKmh = useGarageStore((s) => s.carStats.MaxSpeed);
   const driftCeilingRatio = useGarageStore((s) => s.carStats.DriftCeilingRatio);
+  const activeTireId = useGarageStore((s) => s.loadout.tiresId);
+
+  const boss = CUP_BOSS_BY_TRACK[trackId];
 
   const [visibleSummaryTs, setVisibleSummaryTs] = useState<number | null>(null);
 
@@ -136,12 +160,14 @@ export function TelemetryUI() {
       setVisibleSummaryTs((prev) =>
         prev === lastLapSummary.timestamp ? null : prev
       );
-    }, 4600);
+    }, 4400);
     return () => window.clearTimeout(timer);
   }, [lastLapSummary]);
 
   const showLapMedalBanner =
     !isDerailed &&
+    cupStartPhase !== 'finished' &&
+    cupStartPhase !== 'countdown' &&
     lastLapSummary !== null &&
     visibleSummaryTs === lastLapSummary.timestamp;
 
@@ -156,6 +182,8 @@ export function TelemetryUI() {
   const guideStressWidth = Math.min(100, guideStressRatio * 100);
   const speedBarWidth =
     maxSpeedKmh > 0 ? Math.min(100, (speedKmh / maxSpeedKmh) * 100) : 0;
+  const overVoltPercent = Math.round(overVoltCharge * 100);
+  const isOverVoltReady = overVoltCharge >= 0.99 && !overVoltActive;
 
   const gripBarColor =
     isDerailed || gripUsageRatio >= 1.05
@@ -182,11 +210,13 @@ export function TelemetryUI() {
       ? '0%'
       : `${slopePercent > 0 ? '+' : ''}${Math.round(slopePercent)}%`;
 
+  const gapDisplay = `${gapToRivalM >= 0 ? '+' : ''}${gapToRivalM.toFixed(1)} m`;
+
   return (
     <div className="pointer-events-none fixed inset-0 z-20 flex flex-col justify-between p-3 sm:p-5 select-none">
-      {/* HEADER UNIFICADO SIN SOLAPAMIENTOS: 3 Circuitos + Crono + Sectores F1 | Botonera | Garaje */}
+      {/* HEADER UNIFICADO SIN SOLAPAMIENTOS: 3 Circuitos + Modo Copa 3V + Crono + Sectores F1 | Botonera | Garaje */}
       <header className="flex flex-wrap items-start justify-between gap-3">
-        {/* Bloque Izquierdo: Selector de 3 Circuitos + Cronometraje + Parciales S1/S2/S3 */}
+        {/* Bloque Izquierdo: Selector de 3 Circuitos + Botón Copa Let's & Go + Cronometraje + Parciales S1/S2/S3 */}
         <div className="pointer-events-auto flex flex-wrap items-center gap-3 rounded-md border border-slate-800 bg-[#151B24]/92 px-3.5 py-2 backdrop-blur-md">
           <div>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -212,9 +242,34 @@ export function TelemetryUI() {
                   </button>
                 );
               })}
+
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.unlock();
+                  if (raceMode === 'cup') {
+                    exitCupRace();
+                  } else {
+                    startCupRace();
+                  }
+                }}
+                className={`rounded-xs border px-2.5 py-1 font-display text-xs font-bold transition-colors ${
+                  raceMode === 'cup'
+                    ? 'border-[#F59E0B] bg-[#F59E0B] text-slate-950'
+                    : 'border-[#F59E0B]/60 bg-[#F59E0B]/15 text-[#F59E0B] hover:bg-[#F59E0B]/25'
+                }`}
+              >
+                {raceMode === 'cup' ? '🏆 Salir de Copa' : '🏆 Copa 3V vs Jefe'}
+              </button>
             </div>
             <p className="mt-1 text-[11px] text-slate-400">
-              {CIRCUITS[trackId].subtitle}
+              {raceMode === 'cup' ? (
+                <span className="font-mono text-amber-200">
+                  {boss.cupTitle} · Rival: <strong>{boss.name}</strong>
+                </span>
+              ) : (
+                CIRCUITS[trackId].subtitle
+              )}
             </p>
           </div>
 
@@ -222,10 +277,26 @@ export function TelemetryUI() {
 
           <div>
             <div className="flex gap-3.5 font-mono text-xs tabular-nums">
+              {raceMode === 'cup' && (
+                <div>
+                  <span className="block text-[10px] text-slate-400">Pos.</span>
+                  <span
+                    className={`text-sm font-bold ${
+                      playerRacePosition === 1
+                        ? 'text-emerald-400'
+                        : 'text-[#F59E0B]'
+                    }`}
+                  >
+                    {playerRacePosition}.º / 2
+                  </span>
+                </div>
+              )}
               <div>
                 <span className="block text-[10px] text-slate-400">Vuelta</span>
                 <span className="text-sm font-semibold text-[#F0F4F8]">
-                  {lapCount}
+                  {raceMode === 'cup'
+                    ? `${Math.min(lapCount, cupTargetLaps)}/${cupTargetLaps}`
+                    : lapCount}
                 </span>
               </div>
               <div>
@@ -234,15 +305,30 @@ export function TelemetryUI() {
                   {formatLapTime(currentLapTimeMs)}
                 </span>
               </div>
-              {lastLapTimeMs !== null && (
+              {raceMode === 'cup' ? (
                 <div>
                   <span className="block text-[10px] text-slate-400">
-                    Última
+                    Gap Jefe
                   </span>
-                  <span className="text-sm font-semibold text-slate-300">
-                    {formatLapTime(lastLapTimeMs)}
+                  <span
+                    className={`text-sm font-bold ${
+                      gapToRivalM >= 0 ? 'text-emerald-400' : 'text-[#E63946]'
+                    }`}
+                  >
+                    {gapDisplay}
                   </span>
                 </div>
+              ) : (
+                lastLapTimeMs !== null && (
+                  <div>
+                    <span className="block text-[10px] text-slate-400">
+                      Última
+                    </span>
+                    <span className="text-sm font-semibold text-slate-300">
+                      {formatLapTime(lastLapTimeMs)}
+                    </span>
+                  </div>
+                )
               )}
               <div>
                 <span className="block text-[10px] text-slate-400">Mejor</span>
@@ -273,9 +359,22 @@ export function TelemetryUI() {
           </div>
         </div>
 
-        {/* Bloque Derecho Unificado: Controles de Pista + Ghost Car + Desplegable de Garaje */}
+        {/* Bloque Derecho Unificado: Controles de Pista + Clima [V] + Ghost Car + Desplegable de Garaje */}
         <div className="flex flex-wrap items-center justify-end gap-2">
           <div className="pointer-events-auto flex flex-wrap items-center gap-1.5 rounded-md border border-slate-800 bg-[#151B24]/90 p-1.5 backdrop-blur-md">
+            <button
+              type="button"
+              onClick={toggleWeatherMode}
+              title="Cambiar entre Asfalto Seco y Tormenta de Lluvia (+20% GP en Lluvia) [Tecla V]"
+              className={`rounded-xs border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                weatherMode === 'rain'
+                  ? 'border-sky-400/80 bg-sky-500/25 text-sky-100'
+                  : 'border-slate-700/70 bg-[#0D1117]/70 text-slate-200 hover:border-[#2F81F7]'
+              }`}
+            >
+              Clima: {weatherMode === 'rain' ? '🌧️ Lluvia' : '☀️ Seco'} [V]
+            </button>
+
             <button
               type="button"
               onClick={toggleAssist}
@@ -373,8 +472,100 @@ export function TelemetryUI() {
         </div>
       </header>
 
-      {/* ZONA CENTRAL: Medalla de Vuelta Perfecta / Récord, Aviso de Frenada o Alerta de Descarrilamiento */}
+      {/* ZONA CENTRAL: Semáforo F1, Resultado Copa 3V, Salida Nula/Turbo, Medalla de Vuelta o Aviso de Frenada */}
       <div className="mx-auto flex flex-col items-center gap-2">
+        {/* Semáforo de 5 luces rojas estilo F1 en la parrilla de salida */}
+        {raceMode === 'cup' && cupStartPhase === 'countdown' && (
+          <div className="rounded-md border-2 border-slate-700 bg-[#0D1117]/95 px-6 py-4 text-center shadow-2xl backdrop-blur-md">
+            <span className="font-mono text-[11px] font-bold tracking-wider text-amber-300 uppercase">
+              {boss.cupTitle} · Duelo a {cupTargetLaps} Vueltas vs {boss.name}
+            </span>
+            <div className="my-3 flex items-center justify-center gap-3">
+              {([1, 2, 3, 4, 5] as const).map((idx) => {
+                const lit = countdownLights >= idx;
+                return (
+                  <div
+                    key={idx}
+                    className={`h-9 w-9 rounded-full border-2 transition-all ${
+                      lit
+                        ? 'border-red-300 bg-[#FF1E38] shadow-[0_0_20px_#FF1E38]'
+                        : 'border-slate-700 bg-slate-900'
+                    }`}
+                  />
+                );
+              })}
+            </div>
+            <p className="font-mono text-xs text-slate-300">
+              No aceleres antes de apagarse las luces · Acelera al apagarse para{' '}
+              <strong className="text-cyan-300">Salida Turbo</strong>
+            </p>
+          </div>
+        )}
+
+        {/* Modal de Final de Carrera de Copa 3V */}
+        {raceMode === 'cup' && cupStartPhase === 'finished' && (
+          <div
+            className={`pointer-events-auto max-w-md rounded-md border-2 px-6 py-4 text-center shadow-2xl backdrop-blur-md ${
+              cupWinner === 'player'
+                ? 'border-[#F59E0B] bg-[#151B24]/97'
+                : 'border-slate-600 bg-[#151B24]/97'
+            }`}
+          >
+            <span
+              className={`inline-block rounded-xs px-2.5 py-0.5 font-mono text-xs font-bold ${
+                cupWinner === 'player'
+                  ? 'bg-[#F59E0B] text-slate-950'
+                  : 'bg-slate-700 text-slate-200'
+              }`}
+            >
+              {cupWinner === 'player'
+                ? `🏆 ¡CAMPEÓN DE ${boss.cupTitle.toUpperCase()}!`
+                : `2.º PUESTO · ${boss.name} GANA LA COPA`}
+            </span>
+            <p className="mt-2 font-display text-xl font-bold text-[#F0F4F8]">
+              {cupWinner === 'player'
+                ? `¡Derrotaste a ${boss.name}!`
+                : `${boss.name} cruzó la meta primero`}
+            </p>
+            <p className="mt-1 font-mono text-sm font-bold text-emerald-400">
+              Recompensa de Copa: +{cupRewardGp} GP añadidos al Garaje
+            </p>
+            <div className="mt-3 flex items-center justify-center gap-2.5">
+              <button
+                type="button"
+                onClick={startCupRace}
+                className="rounded-xs bg-[#2F81F7] px-3.5 py-1.5 font-display text-xs font-bold text-white hover:bg-blue-500"
+              >
+                Repetir Copa 3V
+              </button>
+              <button
+                type="button"
+                onClick={exitCupRace}
+                className="rounded-xs border border-slate-700 bg-[#0D1117] px-3.5 py-1.5 font-display text-xs font-semibold text-slate-300 hover:border-slate-500"
+              >
+                Práctica Libre
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Avisos instantáneos de Salida Nula o Salida Turbo */}
+        {falseStartPenalty && (
+          <div className="rounded-md border-2 border-[#E63946] bg-[#151B24]/95 px-4 py-2 text-center shadow-lg">
+            <span className="font-display text-sm font-bold text-[#E63946]">
+              ⚠️ ¡SALIDA NULA! Corte de corriente de penalización (1.2 s)
+            </span>
+          </div>
+        )}
+
+        {turboStartActive && !falseStartPenalty && (
+          <div className="rounded-md border-2 border-cyan-400 bg-cyan-950/90 px-4 py-1.5 text-center shadow-lg">
+            <span className="font-display text-sm font-bold text-cyan-200">
+              ⚡ ¡SALIDA PERFECTA TURBO! +28% Empuje Inicial
+            </span>
+          </div>
+        )}
+
         {isDerailed ? (
           <div
             role="alert"
@@ -414,7 +605,9 @@ export function TelemetryUI() {
                 <p className="mt-1.5 font-display text-lg font-bold tracking-wide text-[#F0F4F8]">
                   {lastLapSummary.title}
                 </p>
-                <p className={`font-mono text-sm font-bold tabular-nums ${style.accent}`}>
+                <p
+                  className={`font-mono text-sm font-bold tabular-nums ${style.accent}`}
+                >
                   {formatLapTime(lastLapSummary.lapTimeMs)}
                 </p>
                 <p className="mt-0.5 text-xs text-slate-300">
@@ -450,16 +643,16 @@ export function TelemetryUI() {
         ) : null}
       </div>
 
-      {/* ZONA INFERIOR: Pedales táctiles PWA + Cuadro principal de Telemetría */}
+      {/* ZONA INFERIOR: Pedales táctiles PWA + Botón OverVolt 18V + Cuadro principal de Telemetría */}
       <div className="flex flex-col-reverse items-stretch justify-between gap-4 sm:flex-row sm:items-end">
-        <div className="pointer-events-auto flex items-center gap-3">
+        <div className="pointer-events-auto flex items-center gap-2.5">
           <button
             type="button"
             onPointerDown={() => setPointerBrake(true)}
             onPointerUp={() => setPointerBrake(false)}
             onPointerLeave={() => setPointerBrake(false)}
             onPointerCancel={() => setPointerBrake(false)}
-            className={`flex h-20 w-28 flex-col items-center justify-center rounded-md border text-sm font-semibold transition-colors active:scale-[0.98] ${
+            className={`flex h-20 w-26 flex-col items-center justify-center rounded-md border text-sm font-semibold transition-colors active:scale-[0.98] ${
               brakeInput > 0
                 ? 'border-[#E63946] bg-[#E63946]/25 text-white'
                 : 'border-slate-700/90 bg-[#151B24]/90 text-slate-200 hover:border-slate-500'
@@ -477,7 +670,7 @@ export function TelemetryUI() {
             onPointerUp={() => setPointerThrottle(false)}
             onPointerLeave={() => setPointerThrottle(false)}
             onPointerCancel={() => setPointerThrottle(false)}
-            className={`flex h-20 w-36 flex-col items-center justify-center rounded-md border text-sm font-semibold transition-colors active:scale-[0.98] ${
+            className={`flex h-20 w-34 flex-col items-center justify-center rounded-md border text-sm font-semibold transition-colors active:scale-[0.98] ${
               throttleInput > 0.05
                 ? 'border-[#2F81F7] bg-[#2F81F7]/25 text-white'
                 : 'border-slate-700/90 bg-[#151B24]/90 text-slate-200 hover:border-slate-500'
@@ -488,23 +681,58 @@ export function TelemetryUI() {
               W / ↑ / Espacio
             </span>
           </button>
+
+          <button
+            type="button"
+            onClick={triggerOverVolt}
+            disabled={!isOverVoltReady && !overVoltActive}
+            title="Descarga condensador OverVolt 18V (+28% aceleración y +14% punta durante 2.5 s) [Tecla B]"
+            className={`flex h-20 w-28 flex-col items-center justify-center rounded-md border text-xs font-bold transition-all active:scale-[0.98] ${
+              overVoltActive
+                ? 'border-cyan-300 bg-cyan-500/35 text-white shadow-[0_0_20px_rgba(56,189,248,0.45)]'
+                : isOverVoltReady
+                  ? 'border-cyan-400 bg-cyan-500/20 text-cyan-200 hover:bg-cyan-500/30'
+                  : 'border-slate-800 bg-[#151B24]/75 text-slate-500'
+            }`}
+          >
+            <span className="font-display text-sm">
+              ⚡ {overVoltActive ? '18V ON' : 'OverVolt'}
+            </span>
+            <span className="mt-0.5 font-mono text-[11px] tabular-nums">
+              {overVoltActive ? 'DESCARGA' : `${overVoltPercent}% [B]`}
+            </span>
+          </button>
         </div>
 
         <section
           aria-label="Telemetría física en tiempo real"
-          className={`pointer-events-auto w-full sm:w-[455px] rounded-md border bg-[#151B24]/92 p-4 backdrop-blur-md transition-colors ${
+          className={`pointer-events-auto w-full sm:w-[465px] rounded-md border bg-[#151B24]/92 p-4 backdrop-blur-md transition-colors ${
             isDerailed || guideStressRatio > 0.65
               ? 'border-[#E63946]'
-              : isDrifting
-                ? 'border-[#F59E0B]/80'
-                : 'border-slate-800'
+              : overVoltActive
+                ? 'border-cyan-400'
+                : isDrifting
+                  ? 'border-[#F59E0B]/80'
+                  : 'border-slate-800'
           }`}
         >
           <div className="flex items-baseline justify-between gap-4">
             <div>
-              <span className="block text-xs text-slate-400">
-                Velocidad actual
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-400">Velocidad actual</span>
+                {slipstreamActive && (
+                  <span className="rounded-xs bg-cyan-500/20 px-1.5 py-0.5 font-mono text-[10px] font-bold text-cyan-300">
+                    ⚡ REBUFO +12%
+                  </span>
+                )}
+                {weatherMode === 'rain' && (
+                  <span className="rounded-xs bg-sky-500/20 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-sky-300">
+                    {activeTireId === 'tir_wet_rain'
+                      ? '🌧️ Wet-Pro 96%'
+                      : '🌧️ Pista Mojada 78%'}
+                  </span>
+                )}
+              </div>
               <div className="flex items-baseline gap-2">
                 <span className="font-mono text-4xl font-bold tracking-tight tabular-nums text-[#F0F4F8]">
                   {Math.round(speedKmh)}
@@ -546,12 +774,34 @@ export function TelemetryUI() {
 
           <div className="mt-2 h-1.5 w-full overflow-hidden rounded-xs bg-slate-800/90">
             <div
-              className="h-full bg-slate-300 transition-[width] duration-75"
+              className={`h-full transition-[width] duration-75 ${
+                overVoltActive ? 'bg-cyan-400' : 'bg-slate-300'
+              }`}
               style={{ width: `${speedBarWidth}%` }}
             />
           </div>
 
-          <div className="my-3.5 h-px bg-slate-800" />
+          {/* Barra de carga del Condensador OverVolt 18V (Derrape + Rebufo) */}
+          <div className="mt-2 flex items-center gap-2.5">
+            <span className="shrink-0 font-mono text-[10px] text-cyan-300">
+              Condensador 18V [B]
+            </span>
+            <div className="h-1.5 flex-1 overflow-hidden rounded-xs bg-slate-800/90">
+              <div
+                className={`h-full transition-[width] duration-75 ${
+                  overVoltActive || isOverVoltReady
+                    ? 'bg-cyan-400'
+                    : 'bg-cyan-600/80'
+                }`}
+                style={{ width: `${overVoltActive ? 100 : overVoltPercent}%` }}
+              />
+            </div>
+            <span className="w-10 text-right font-mono text-[10px] tabular-nums text-cyan-200">
+              {overVoltActive ? 'ACTIVO' : `${overVoltPercent}%`}
+            </span>
+          </div>
+
+          <div className="my-3 h-px bg-slate-800" />
 
           <div>
             <div className="flex items-baseline justify-between">

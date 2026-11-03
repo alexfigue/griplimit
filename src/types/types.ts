@@ -1,12 +1,16 @@
 /**
- * Dominio completo v1.0 de Grip Limit:
- * Garaje + Economía GP + Coches Custom (.glb) + 3 Circuitos + Sectores F1 + Vuelta Perfecta + Ghost Car.
+ * Dominio completo v2.0 de Grip Limit:
+ * Garaje + Flota CC0 + Showroom 360° + Economía GP + Coches Custom (.glb) +
+ * 3 Circuitos + Sectores F1 + Modo Copa 3V + Semáforo F1 + Rebufo + OverVolt 18V + Clima Dinámico.
  */
 
 export type TrackId = 'montmelo' | 'sierra-seca' | 'neo-wangan';
 export type LaneId = 'left' | 'right';
 export type CameraMode = 'chase' | 'overhead';
 export type EnvironmentStyle = 'realistic' | 'tabletop';
+export type WeatherMode = 'dry' | 'rain';
+export type RaceMode = 'free' | 'cup';
+export type CupStartPhase = 'idle' | 'countdown' | 'green' | 'finished';
 export type BrakeAdviceLevel = 'clear' | 'coast' | 'brake';
 export type SectorColor = 'pending' | 'purple' | 'green' | 'amber';
 export type LapMedalGrade = 'perfect' | 'drift-master' | 'clean' | 'completed';
@@ -174,6 +178,14 @@ export interface TelemetrySnapshot {
   readonly lastDerailForce: number;
   readonly throttleInput: number;
   readonly brakeInput: number;
+  readonly slipstreamActive: boolean;
+  readonly overVoltCharge: number;
+  readonly overVoltActive: boolean;
+  readonly falseStartPenalty: boolean;
+  readonly turboStartActive: boolean;
+  readonly gapToRivalM: number;
+  readonly playerRacePosition: 1 | 2;
+  readonly rivalLapCount: number;
 }
 
 export interface TelemetryStoreState extends TelemetrySnapshot {
@@ -185,6 +197,14 @@ export interface TelemetryStoreState extends TelemetrySnapshot {
   readonly soundEnabled: boolean;
   readonly cameraMode: CameraMode;
   readonly environmentStyle: EnvironmentStyle;
+  readonly weatherMode: WeatherMode;
+  readonly raceMode: RaceMode;
+  readonly cupStartPhase: CupStartPhase;
+  readonly countdownLights: 0 | 1 | 2 | 3 | 4 | 5;
+  readonly cupTargetLaps: number;
+  readonly cupWinner: 'player' | 'rival' | null;
+  readonly cupRewardGp: number;
+  readonly overVoltTriggerNonce: number;
   readonly resetNonce: number;
   readonly ghostVersionNonce: number;
   readonly bestLapByTrack: Record<TrackId, number | null>;
@@ -210,6 +230,15 @@ export interface TelemetryStoreState extends TelemetrySnapshot {
   }) => LapEvaluationSummary;
   bumpGhostVersion: () => void;
   setTrackId: (trackId: TrackId) => void;
+  startCupRace: () => void;
+  exitCupRace: () => void;
+  setCupCountdownState: (
+    phase: CupStartPhase,
+    lights: 0 | 1 | 2 | 3 | 4 | 5
+  ) => void;
+  finishCupRace: (winner: 'player' | 'rival') => void;
+  triggerOverVolt: () => void;
+  toggleWeatherMode: () => void;
   togglePlayerLane: () => void;
   toggleRival: () => void;
   toggleGhost: () => void;

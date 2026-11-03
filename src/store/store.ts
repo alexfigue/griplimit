@@ -10,6 +10,7 @@ import {
 import type {
   BodyShellPart,
   CarLoadout,
+  CupStartPhase,
   CustomAeroArchetype,
   GarageStoreState,
   LapEvaluationSummary,
@@ -29,6 +30,12 @@ const GARAGE_STORAGE_KEY = 'griplimit_garage_v1';
 const RECORDS_STORAGE_KEY = 'griplimit_records_v2';
 const LEGACY_BEST_LAPS_KEY = 'griplimit_best_laps_v1';
 const INITIAL_GP_CREDITS = 250;
+
+const CUP_VICTORY_PRIZE_BY_TRACK: Record<TrackId, number> = {
+  montmelo: 450,
+  'sierra-seca': 600,
+  'neo-wangan': 850,
+};
 
 function computeDefaultUnlockedPartIds(catalog: PartsCatalog): string[] {
   const freeIds: string[] = [];
@@ -103,7 +110,7 @@ function loadPersistedGarage(): PersistedGaragePayload | null {
 }
 
 /**
- * STORE 1: GARAJE, ECONOMÍA GP Y COCHES CUSTOM (.GLB)
+ * STORE 1: GARAJE, ECONOMÍA GP, FLOTA CC0, SHOWROOM 360° Y COCHES CUSTOM (.GLB)
  * Estrictamente aislado de la telemetría física de alta frecuencia.
  */
 export const useGarageStore = create<GarageStoreState>((set, get) => {
@@ -125,7 +132,6 @@ export const useGarageStore = create<GarageStoreState>((set, get) => {
     const state = get();
     const bodies = customBodiesOverride ?? state.customBodies;
     const activeParts = resolveLoadoutParts(state.catalog, nextLoadout, bodies);
-    // Normalizamos el bodyId por si apuntaba a un coche custom eliminado
     const normalizedLoadout: CarLoadout = {
       engineId: activeParts.engine.id,
       tiresId: activeParts.tires.id,
@@ -346,12 +352,6 @@ const DEFAULT_BEST_LAPS: BestLapsMap = {
   'neo-wangan': null,
 };
 
-const DEFAULT_BEST_SECTORS: BestSectorsMap = {
-  montmelo: [null, null, null],
-  'sierra-seca': [null, null, null],
-  'neo-wangan': [null, null, null],
-};
-
 const EMPTY_SECTOR_SPLITS: readonly [
   SectorSplitInfo,
   SectorSplitInfo,
@@ -414,7 +414,6 @@ function loadPersistedRecords(): PersistedRecordsPayload {
       };
     }
 
-    // Migración suave desde v1 si existían récords previos
     const legacyRaw = window.localStorage.getItem(LEGACY_BEST_LAPS_KEY);
     if (legacyRaw) {
       const legacy = JSON.parse(legacyRaw) as Partial<BestLapsMap>;
@@ -479,10 +478,18 @@ const INITIAL_TELEMETRY_SNAPSHOT: TelemetrySnapshot = {
   lastDerailForce: 0,
   throttleInput: 0,
   brakeInput: 0,
+  slipstreamActive: false,
+  overVoltCharge: 0.45,
+  overVoltActive: false,
+  falseStartPenalty: false,
+  turboStartActive: false,
+  gapToRivalM: 0,
+  playerRacePosition: 1,
+  rivalLapCount: 1,
 };
 
 /**
- * STORE 2: TELEMETRÍA FÍSICA EN TIEMPO REAL, SECTORES F1, MEDALLAS Y GHOST CAR
+ * STORE 2: TELEMETRÍA FÍSICA EN TIEMPO REAL, COPA 3V, SEMÁFORO F1, REBUFO, OVERVOLT 18V Y CLIMA
  */
 export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
   const ensureRecordsLoaded = (): PersistedRecordsPayload => {
@@ -508,6 +515,14 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
     soundEnabled: true,
     cameraMode: 'chase',
     environmentStyle: 'realistic',
+    weatherMode: 'dry',
+    raceMode: 'free',
+    cupStartPhase: 'idle',
+    countdownLights: 0,
+    cupTargetLaps: 3,
+    cupWinner: null,
+    cupRewardGp: 0,
+    overVoltTriggerNonce: 0,
     resetNonce: 0,
     ghostVersionNonce: 0,
     bestLapByTrack: { ...DEFAULT_BEST_LAPS },
@@ -559,7 +574,6 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
         deltaMs,
       };
 
-      // Al marcar S1 de una nueva vuelta limpiamos S2 y S3 anteriores para mostrar progresión en vivo
       const baseSplits: [SectorSplitInfo, SectorSplitInfo, SectorSplitInfo] =
         sectorIndex === 0
           ? [
@@ -639,7 +653,10 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
       }
 
       const assistMultiplier = state.assistEnabled ? 1.0 : 1.35;
-      const earnedCredits = Math.round(baseCredits * assistMultiplier);
+      const weatherMultiplier = state.weatherMode === 'rain' ? 1.2 : 1.0;
+      const earnedCredits = Math.round(
+        baseCredits * assistMultiplier * weatherMultiplier
+      );
 
       useGarageStore.getState().addGpCredits(earnedCredits);
 
@@ -674,8 +691,14 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
 
       set((state) => ({
         trackId,
+        raceMode: 'free',
+        cupStartPhase: 'idle',
+        countdownLights: 0,
+        cupWinner: null,
+        cupRewardGp: 0,
         resetNonce: state.resetNonce + 1,
         lapCount: 1,
+        rivalLapCount: 1,
         currentLapTimeMs: 0,
         lastLapTimeMs: null,
         bestLapTimeMs: bestLaps[trackId],
@@ -693,8 +716,100 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
         speedKmh: 0,
         centrifugalForce: 0,
         gripUsageRatio: 0,
+        slipstreamActive: false,
+        overVoltActive: false,
+        falseStartPenalty: false,
+        turboStartActive: false,
       }));
     },
+
+    startCupRace: () => {
+      useGarageStore.getState().setGarageOpen(false);
+      set((state) => ({
+        raceMode: 'cup',
+        rivalEnabled: true,
+        cupStartPhase: 'countdown',
+        countdownLights: 1,
+        cupWinner: null,
+        cupRewardGp: 0,
+        resetNonce: state.resetNonce + 1,
+        lapCount: 1,
+        rivalLapCount: 1,
+        playerRacePosition: 1,
+        gapToRivalM: 0,
+        currentLapTimeMs: 0,
+        currentSectors: EMPTY_SECTOR_SPLITS,
+        lastLapSummary: null,
+        isDerailed: false,
+        isDrifting: false,
+        driftAngleDeg: 0,
+        guideStressRatio: 0,
+        speedMs: 0,
+        speedKmh: 0,
+        centrifugalForce: 0,
+        gripUsageRatio: 0,
+        slipstreamActive: false,
+        overVoltCharge: 0.5,
+        overVoltActive: false,
+        falseStartPenalty: false,
+        turboStartActive: false,
+      }));
+    },
+
+    exitCupRace: () =>
+      set((state) => ({
+        raceMode: 'free',
+        cupStartPhase: 'idle',
+        countdownLights: 0,
+        cupWinner: null,
+        cupRewardGp: 0,
+        resetNonce: state.resetNonce + 1,
+        lapCount: 1,
+        rivalLapCount: 1,
+        currentLapTimeMs: 0,
+        currentSectors: EMPTY_SECTOR_SPLITS,
+        speedMs: 0,
+        speedKmh: 0,
+      })),
+
+    setCupCountdownState: (
+      phase: CupStartPhase,
+      lights: 0 | 1 | 2 | 3 | 4 | 5
+    ) =>
+      set({
+        cupStartPhase: phase,
+        countdownLights: lights,
+      }),
+
+    finishCupRace: (winner: 'player' | 'rival') => {
+      const state = get();
+      if (state.cupStartPhase === 'finished') return;
+
+      const basePrize =
+        winner === 'player'
+          ? CUP_VICTORY_PRIZE_BY_TRACK[state.trackId]
+          : 150;
+      const rainBonus = state.weatherMode === 'rain' ? 1.25 : 1.0;
+      const reward = Math.round(basePrize * rainBonus);
+
+      useGarageStore.getState().addGpCredits(reward);
+
+      set({
+        cupStartPhase: 'finished',
+        cupWinner: winner,
+        cupRewardGp: reward,
+      });
+    },
+
+    triggerOverVolt: () =>
+      set((state) => ({
+        overVoltTriggerNonce: state.overVoltTriggerNonce + 1,
+      })),
+
+    toggleWeatherMode: () =>
+      set((state) => ({
+        weatherMode: state.weatherMode === 'dry' ? 'rain' : 'dry',
+      })),
 
     togglePlayerLane: () =>
       set((state) => ({

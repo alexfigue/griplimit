@@ -309,6 +309,9 @@ function buildDualLaneTrackGeometries(
  */
 export function Track() {
   const trackId = useTelemetryStore((s) => s.trackId);
+  const weatherMode = useTelemetryStore((s) => s.weatherMode);
+  const cupStartPhase = useTelemetryStore((s) => s.cupStartPhase);
+  const countdownLights = useTelemetryStore((s) => s.countdownLights);
 
   const curve = useMemo(() => getTrackCurve(trackId), [trackId]);
   const {
@@ -326,6 +329,7 @@ export function Track() {
 
   const isWangan = trackId === 'neo-wangan';
   const isSierra = trackId === 'sierra-seca';
+  const isRain = weatherMode === 'rain';
 
   return (
     <group name={`circuit-${trackId}`}>
@@ -333,17 +337,23 @@ export function Track() {
       <mesh geometry={skirtGeo} receiveShadow castShadow>
         <meshStandardMaterial
           color={isWangan ? '#0F172A' : isSierra ? '#2A2118' : '#161D24'}
-          roughness={0.9}
+          roughness={isRain ? 0.55 : 0.9}
           side={THREE.DoubleSide}
         />
       </mesh>
 
-      {/* Cinta de asfalto de doble carril */}
+      {/* Cinta de asfalto de doble carril (con reflejo especular húmedo en modo Lluvia) */}
       <mesh geometry={asphaltGeo} receiveShadow>
         <meshStandardMaterial
-          color={isWangan ? '#151B28' : '#1E242D'}
-          roughness={isWangan ? 0.72 : 0.82}
-          metalness={isWangan ? 0.16 : 0.08}
+          color={
+            isRain
+              ? '#111620'
+              : isWangan
+                ? '#151B28'
+                : '#1E242D'
+          }
+          roughness={isRain ? 0.16 : isWangan ? 0.72 : 0.82}
+          metalness={isRain ? 0.56 : isWangan ? 0.16 : 0.08}
           side={THREE.DoubleSide}
         />
       </mesh>
@@ -409,6 +419,50 @@ export function Track() {
             roughness={0.35}
           />
         </mesh>
+
+        {/* Semáforo Oficial F1 de 5 Focos en el Pórtico de Salida */}
+        {([-2.4, -1.2, 0, 1.2, 2.4] as const).map((lx, idx) => {
+          const lightIndex = idx + 1;
+          const isRedOn =
+            cupStartPhase === 'countdown' && countdownLights >= lightIndex;
+          const isGreenOn = cupStartPhase === 'green';
+
+          const bulbColor = isRedOn
+            ? '#FF1E38'
+            : isGreenOn
+              ? '#10B981'
+              : '#1E293B';
+          const emissiveColor = isRedOn
+            ? '#FF1E38'
+            : isGreenOn
+              ? '#10B981'
+              : '#000000';
+
+          return (
+            <group key={lightIndex} position={[lx, 4.18, 0]}>
+              <mesh>
+                <boxGeometry args={[0.72, 0.68, 0.42]} />
+                <meshStandardMaterial color="#0D1117" roughness={0.6} />
+              </mesh>
+              <mesh position={[0, 0, -0.22]}>
+                <sphereGeometry args={[0.21, 14, 14]} />
+                <meshStandardMaterial
+                  color={bulbColor}
+                  emissive={emissiveColor}
+                  emissiveIntensity={isRedOn || isGreenOn ? 3.5 : 0}
+                />
+              </mesh>
+              <mesh position={[0, 0, 0.22]}>
+                <sphereGeometry args={[0.21, 14, 14]} />
+                <meshStandardMaterial
+                  color={bulbColor}
+                  emissive={emissiveColor}
+                  emissiveIntensity={isRedOn || isGreenOn ? 3.5 : 0}
+                />
+              </mesh>
+            </group>
+          );
+        })}
       </group>
     </group>
   );

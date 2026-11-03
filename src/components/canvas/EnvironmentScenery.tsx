@@ -1,11 +1,83 @@
 'use client';
 
 import React, { useLayoutEffect, useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
 import { Sky } from '@react-three/drei';
 import * as THREE from 'three';
 import { getTrackLUT, type TrackLUT } from '@/lib/montmeloSpline';
 import { useTelemetryStore } from '@/store/store';
 import type { TrackId } from '@/types/types';
+
+const RAIN_DROP_COUNT = 950;
+
+/**
+ * Cortina 3D de lluvia dinámica 0-GC (LineSegments pre-alojados en memoria).
+ */
+function RainPrecipitation3D() {
+  const linesRef = useRef<THREE.LineSegments>(null);
+
+  const rainBuffer = useMemo(() => {
+    const positions = new Float32Array(RAIN_DROP_COUNT * 6);
+    const speeds = new Float32Array(RAIN_DROP_COUNT);
+    const rand = createSeededRandom(7744);
+
+    for (let i = 0; i < RAIN_DROP_COUNT; i++) {
+      const x = (rand() - 0.5) * 320;
+      const y = rand() * 48;
+      const z = (rand() - 0.5) * 260 - 15;
+      const base = i * 6;
+
+      positions[base] = x;
+      positions[base + 1] = y;
+      positions[base + 2] = z;
+
+      positions[base + 3] = x + 0.18;
+      positions[base + 4] = y + 1.75;
+      positions[base + 5] = z + 0.12;
+
+      speeds[i] = 44 + rand() * 18;
+    }
+
+    const geo = new THREE.BufferGeometry();
+    const posAttr = new THREE.BufferAttribute(positions, 3);
+    posAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('position', posAttr);
+
+    return { geo, positions, speeds };
+  }, []);
+
+  useFrame((_, rawDelta) => {
+    const dt = Math.min(rawDelta, 0.05);
+    const { positions, speeds, geo } = rainBuffer;
+
+    for (let i = 0; i < RAIN_DROP_COUNT; i++) {
+      const base = i * 6;
+      const nextY = positions[base + 1] - speeds[i] * dt;
+      const wrappedY = nextY < -0.5 ? 46 + (nextY + 0.5) : nextY;
+
+      positions[base + 1] = wrappedY;
+      positions[base + 4] = wrappedY + 1.75;
+    }
+
+    const posAttr = geo.getAttribute('position') as THREE.BufferAttribute;
+    posAttr.needsUpdate = true;
+  });
+
+  return (
+    <lineSegments
+      ref={linesRef}
+      geometry={rainBuffer.geo}
+      frustumCulled={false}
+    >
+      <lineBasicMaterial
+        color="#BAE6FD"
+        transparent
+        opacity={0.42}
+        depthWrite={false}
+      />
+    </lineSegments>
+  );
+}
 
 function createSeededRandom(seed: number): () => number {
   let s = seed >>> 0;
@@ -570,6 +642,8 @@ function TabletopLivingRoomDiorama() {
 export function EnvironmentScenery() {
   const trackId = useTelemetryStore((s) => s.trackId);
   const environmentStyle = useTelemetryStore((s) => s.environmentStyle);
+  const weatherMode = useTelemetryStore((s) => s.weatherMode);
+  const isRain = weatherMode === 'rain';
 
   const lut = useMemo(() => getTrackLUT(trackId), [trackId]);
   const terrainGeo = useMemo(
@@ -606,6 +680,7 @@ export function EnvironmentScenery() {
           shadow-camera-top={150}
           shadow-camera-bottom={-150}
         />
+        {isRain && <RainPrecipitation3D />}
         <TabletopLivingRoomDiorama />
       </>
     );
@@ -615,7 +690,7 @@ export function EnvironmentScenery() {
     return (
       <>
         <color attach="background" args={['#050811']} />
-        <fog attach="fog" args={['#070C1A', 155, 450]} />
+        <fog attach="fog" args={['#070C1A', isRain ? 115 : 155, isRain ? 360 : 450]} />
 
         <hemisphereLight args={['#38BDF8', '#090D16', 0.72]} />
         <directionalLight
@@ -642,11 +717,12 @@ export function EnvironmentScenery() {
         <mesh geometry={terrainGeo} receiveShadow>
           <meshStandardMaterial
             vertexColors
-            roughness={0.86}
-            metalness={0.18}
+            roughness={isRain ? 0.45 : 0.86}
+            metalness={isRain ? 0.35 : 0.18}
           />
         </mesh>
 
+        {isRain && <RainPrecipitation3D />}
         <InstancedNeonSkyscrapers transforms={propTransforms} />
       </>
     );
@@ -658,33 +734,39 @@ export function EnvironmentScenery() {
     <>
       <color
         attach="background"
-        args={[isSierra ? '#D99B66' : '#8CB8DE']}
+        args={[isRain ? '#263445' : isSierra ? '#D99B66' : '#8CB8DE']}
       />
       <fog
         attach="fog"
-        args={[isSierra ? '#C98A5B' : '#9EC3E2', 170, 470]}
+        args={[
+          isRain ? '#263445' : isSierra ? '#C98A5B' : '#9EC3E2',
+          isRain ? 115 : 170,
+          isRain ? 360 : 470,
+        ]}
       />
 
-      <Sky
-        distance={4500}
-        sunPosition={isSierra ? [-110, 16, -75] : [95, 58, 65]}
-        turbidity={isSierra ? 7.8 : 3.4}
-        rayleigh={isSierra ? 2.3 : 1.15}
-        mieCoefficient={0.005}
-        mieDirectionalG={0.8}
-      />
+      {!isRain && (
+        <Sky
+          distance={4500}
+          sunPosition={isSierra ? [-110, 16, -75] : [95, 58, 65]}
+          turbidity={isSierra ? 7.8 : 3.4}
+          rayleigh={isSierra ? 2.3 : 1.15}
+          mieCoefficient={0.005}
+          mieDirectionalG={0.8}
+        />
+      )}
 
       <hemisphereLight
         args={[
-          isSierra ? '#FFD2A6' : '#D6ECFF',
-          isSierra ? '#4A2C1A' : '#263822',
-          0.78,
+          isRain ? '#94A3B8' : isSierra ? '#FFD2A6' : '#D6ECFF',
+          isRain ? '#1E293B' : isSierra ? '#4A2C1A' : '#263822',
+          isRain ? 0.65 : 0.78,
         ]}
       />
       <directionalLight
         position={isSierra ? [-110, 95, -75] : [95, 125, 65]}
-        intensity={isSierra ? 2.15 : 1.95}
-        color={isSierra ? '#FFD7AD' : '#FFFDF8'}
+        intensity={isRain ? 1.15 : isSierra ? 2.15 : 1.95}
+        color={isRain ? '#CBD5E1' : isSierra ? '#FFD7AD' : '#FFFDF8'}
         castShadow
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
@@ -697,8 +779,13 @@ export function EnvironmentScenery() {
       />
 
       <mesh geometry={terrainGeo} receiveShadow>
-        <meshStandardMaterial vertexColors roughness={0.94} />
+        <meshStandardMaterial
+          vertexColors
+          roughness={isRain ? 0.65 : 0.94}
+        />
       </mesh>
+
+      {isRain && <RainPrecipitation3D />}
 
       {isSierra ? (
         <InstancedDesertCanyonProps transforms={propTransforms} />
