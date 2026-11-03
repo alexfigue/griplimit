@@ -4,6 +4,10 @@ import React, { Component, Suspense, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
+import {
+  buildProMotorsportWheel,
+  type ProWheelSpec,
+} from '@/lib/proWheelsGenerator';
 
 export const CAR_GLB_PATH = '/cars/gt3-enduro-pro.glb';
 const TARGET_CAR_LENGTH_M = 4.4;
@@ -32,107 +36,12 @@ const CAR_SIGNATURE_PAINT_HEX: Record<string, number> = {
   '/cars/f1-monoposto-pro.glb': 0xdc2626, // Scuderia Rosso Corsa
 };
 
-interface WheelSpec {
-  x: number;
-  y: number;
-  z: number;
-  r: number;
-  w: number;
-  rim?: number;
-}
-
 interface ProCarExtras {
+  id?: string;
   wheels?: {
-    front: WheelSpec;
-    rear: WheelSpec;
+    front: ProWheelSpec;
+    rear: ProWheelSpec;
   };
-}
-
-function buildDetailedRacingWheel(
-  spec: WheelSpec,
-  isLeft: boolean,
-  isGhost: boolean
-): THREE.Group {
-  const wheelGroup = new THREE.Group();
-  const r = spec.r || 0.33;
-  const w = spec.w || 0.28;
-  const rimR = spec.rim || r * 0.64;
-
-  if (isGhost) {
-    const ghostTire = new THREE.Mesh(
-      new THREE.CylinderGeometry(r, r, w, 20),
-      GHOST_HOLOGRAM_MATERIAL
-    );
-    ghostTire.rotation.z = Math.PI / 2;
-    wheelGroup.add(ghostTire);
-    return wheelGroup;
-  }
-
-  // 1. Neumático Slick de caucho vulcanizado
-  const tireGeo = new THREE.CylinderGeometry(r, r, w, 28);
-  tireGeo.rotateZ(Math.PI / 2);
-  const tireMat = new THREE.MeshStandardMaterial({
-    color: '#12151A',
-    roughness: 0.76,
-    metalness: 0.08,
-  });
-  const tireMesh = new THREE.Mesh(tireGeo, tireMat);
-  tireMesh.castShadow = true;
-  tireMesh.receiveShadow = true;
-  wheelGroup.add(tireMesh);
-
-  // 2. Tambor interior de llanta de aleación forjada
-  const rimGeo = new THREE.CylinderGeometry(rimR, rimR, w * 1.03, 24);
-  rimGeo.rotateZ(Math.PI / 2);
-  const rimMat = new THREE.MeshStandardMaterial({
-    color: '#CBD5E1',
-    metalness: 0.88,
-    roughness: 0.2,
-  });
-  const rimMesh = new THREE.Mesh(rimGeo, rimMat);
-  wheelGroup.add(rimMesh);
-
-  // 3. Disco de freno cerámico ventilado interior
-  const discGeo = new THREE.CylinderGeometry(
-    rimR * 0.78,
-    rimR * 0.78,
-    w * 1.05,
-    20
-  );
-  discGeo.rotateZ(Math.PI / 2);
-  const discMat = new THREE.MeshStandardMaterial({
-    color: '#475569',
-    metalness: 0.82,
-    roughness: 0.32,
-  });
-  wheelGroup.add(new THREE.Mesh(discGeo, discMat));
-
-  // 4. Radios forjados (5 radios dobles) para apreciar claramente el giro físico a alta velocidad
-  const spokeMat = new THREE.MeshStandardMaterial({
-    color: '#E2E8F0',
-    metalness: 0.92,
-    roughness: 0.16,
-  });
-  const outerX = (isLeft ? 1 : -1) * (w * 0.49);
-  const spokeGeo = new THREE.BoxGeometry(0.025, rimR * 1.82, 0.036);
-  for (let s = 0; s < 5; s++) {
-    const spoke = new THREE.Mesh(spokeGeo, spokeMat);
-    spoke.position.x = outerX;
-    spoke.rotation.x = (s * Math.PI) / 5;
-    wheelGroup.add(spoke);
-  }
-
-  // 5. Tuerca central monotuerca de competición (Center-Lock Roja)
-  const nutGeo = new THREE.CylinderGeometry(0.048, 0.048, w * 1.09, 12);
-  nutGeo.rotateZ(Math.PI / 2);
-  const nutMat = new THREE.MeshStandardMaterial({
-    color: '#E63946',
-    metalness: 0.75,
-    roughness: 0.22,
-  });
-  wheelGroup.add(new THREE.Mesh(nutGeo, nutMat));
-
-  return wheelGroup;
 }
 
 export interface CarVisualMotionState {
@@ -301,18 +210,24 @@ function LoadedCarGLB({
     const extras = (scene.userData ?? {}) as ProCarExtras;
     if (extras.wheels?.front && extras.wheels?.rear && wheelNodes.length === 0) {
       const { front, rear } = extras.wheels;
-      const placements: Array<{ spec: WheelSpec; xSign: 1 | -1; isLeft: boolean }> = [
-        { spec: front, xSign: 1, isLeft: true },
-        { spec: front, xSign: -1, isLeft: false },
-        { spec: rear, xSign: 1, isLeft: true },
-        { spec: rear, xSign: -1, isLeft: false },
+      const placements: Array<{ spec: ProWheelSpec; xSign: 1 | -1 }> = [
+        { spec: front, xSign: 1 },
+        { spec: front, xSign: -1 },
+        { spec: rear, xSign: 1 },
+        { spec: rear, xSign: -1 },
       ];
 
       for (const p of placements) {
-        const wGroup = buildDetailedRacingWheel(p.spec, p.isLeft, isGhost);
-        wGroup.position.set(p.spec.x * p.xSign, p.spec.y, p.spec.z);
-        cloned.add(wGroup);
-        wheelNodes.push(wGroup);
+        const { rootGroup, spinGroup } = buildProMotorsportWheel(
+          p.spec,
+          extras.id,
+          p.xSign,
+          isGhost,
+          GHOST_HOLOGRAM_MATERIAL
+        );
+        rootGroup.position.set(p.spec.x * p.xSign, p.spec.y, p.spec.z);
+        cloned.add(rootGroup);
+        wheelNodes.push(spinGroup);
       }
     }
 

@@ -83,30 +83,6 @@
       "aeroSpeedFactor": 1.04,
       "price": 0,
       "author": "Pro Motorsport CAD"
-    },
-    {
-      "id": "body_apex_supercar",
-      "name": "Apex V10 Stradale",
-      "description": "Coupé deportivo de calle aligerado para Track-Day con alerón fijo GT.",
-      "modelPath": "/cars/apex-supercar.glb",
-      "yawOffsetRad": 0,
-      "weight": 14,
-      "downforceCoeff": 0.76,
-      "aeroSpeedFactor": 1.02,
-      "price": 0,
-      "author": "Open Source 3D"
-    },
-    {
-      "id": "body_kenney_truck",
-      "name": "Titan Euro-Truck Racing",
-      "description": "Cabeza tractora de campeonato europeo de camiones. Par descomunal e inercia pesada en frenada.",
-      "modelPath": "/cars/kenney-race-truck.glb",
-      "yawOffsetRad": 0,
-      "weight": 24,
-      "downforceCoeff": 0.72,
-      "aeroSpeedFactor": 0.94,
-      "price": 0,
-      "author": "Kenney CC0"
     }
   ],
   "engines": [

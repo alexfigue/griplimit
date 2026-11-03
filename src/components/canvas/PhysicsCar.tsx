@@ -63,6 +63,16 @@ interface InternalPhysicsState {
   derailTimerSec: number;
   derailPosition: THREE.Vector3;
   derailVelocity: THREE.Vector3;
+  derailForwardSpeedMs: number;
+  derailLateralM: number;
+  derailLateralVelMs: number;
+  derailVerticalY: number;
+  derailVerticalVelMs: number;
+  derailYawAngleRad: number;
+  derailYawVelRad: number;
+  derailRollVelRad: number;
+  derailPitchVelRad: number;
+  derailVaultedBarrier: boolean;
   peakDerailForceN: number;
   lapCount: number;
   lapTimeMs: number;
@@ -156,6 +166,16 @@ export function PhysicsCar() {
     derailTimerSec: 0,
     derailPosition: new THREE.Vector3(),
     derailVelocity: new THREE.Vector3(),
+    derailForwardSpeedMs: 0,
+    derailLateralM: targetLaneOffsetM,
+    derailLateralVelMs: 0,
+    derailVerticalY: 0,
+    derailVerticalVelMs: 0,
+    derailYawAngleRad: 0,
+    derailYawVelRad: 0,
+    derailRollVelRad: 0,
+    derailPitchVelRad: 0,
+    derailVaultedBarrier: false,
     peakDerailForceN: 0,
     lapCount: 1,
     lapTimeMs: 0,
@@ -691,14 +711,44 @@ export function PhysicsCar() {
         sim.peakDerailForceN = currentCentrifugalForceN;
         sim.overVoltTimerSec = 0;
 
+        // Dirección lateral hacia el exterior de la curva (1 = hacia +right, -1 = hacia -right)
+        const outRightSign =
+          _kinematics.outwardNormal.dot(_kinematics.right) >= 0 ? 1 : -1;
+
+        // Si el exceso de velocidad es extremo o ocurre en un cambio de rasante elevado, el coche salta el guardarrail
+        const shouldVaultBarrier =
+          gripRatio > 1.52 ||
+          sim.speedMs > 38 ||
+          (_kinematics.position.y > 2.4 && sim.speedMs > 27);
+
+        sim.derailVaultedBarrier = shouldVaultBarrier;
+        sim.derailForwardSpeedMs = sim.speedMs * 0.86;
+        sim.derailLateralM = sim.lateralOffsetM;
+        sim.derailLateralVelMs =
+          outRightSign *
+          (shouldVaultBarrier ? sim.speedMs * 0.48 : sim.speedMs * 0.36);
+        sim.derailVerticalY = _laneWorldPos.y;
+        sim.derailVerticalVelMs = shouldVaultBarrier
+          ? 2.6 + Math.min(2.4, (sim.speedMs - 24) * 0.12)
+          : 0.95;
+
+        // Trompo inicial de slot al desenganchar la pala guía del carril
+        sim.derailYawAngleRad = vis.driftYawRad;
+        sim.derailYawVelRad = -_kinematics.turnSign * (6.8 + Math.random() * 2.5);
+        sim.derailRollVelRad = shouldVaultBarrier
+          ? outRightSign * (4.2 + Math.random() * 2.2)
+          : outRightSign * 1.8;
+        sim.derailPitchVelRad = shouldVaultBarrier ? -2.4 : -0.6;
+
         sim.derailPosition.copy(_laneWorldPos);
         sim.derailVelocity
           .copy(_kinematics.tangent)
-          .multiplyScalar(sim.speedMs * 0.8)
-          .addScaledVector(_kinematics.outwardNormal, sim.speedMs * 0.36);
+          .multiplyScalar(sim.derailForwardSpeedMs)
+          .addScaledVector(_kinematics.right, sim.derailLateralVelMs);
+        sim.derailVelocity.y = sim.derailVerticalVelMs;
 
         vis.isDerailed = true;
-        vis.driftIntensity = 0;
+        vis.driftIntensity = 1.0;
         setIsDerailedVisual(true);
         soundEngine.playDerailSound();
         forceImmediateHudSync = true;
@@ -747,21 +797,164 @@ export function PhysicsCar() {
       }
 
       sim.derailTimerSec -= dt;
-      sim.derailPosition.addScaledVector(sim.derailVelocity, dt);
 
-      const currentSlipSpeed = sim.derailVelocity.length();
-      if (currentSlipSpeed > 0.05) {
-        const nextSlipSpeed = Math.max(
+      const ARMCO_BARRIER_LIMIT_M = 3.92;
+      const DECK_EDGE_LIMIT_M = 4.62;
+
+      if (
+        !sim.derailVaultedBarrier ||
+        Math.abs(sim.derailLateralM) < DECK_EDGE_LIMIT_M
+      ) {
+        // FASE EN PISTA: El coche se desliza haciendo un trompo sobre el asfalto/piano y golpea el guardarrail Armco
+        sim.distanceM =
+          ((sim.distanceM + sim.derailForwardSpeedMs * dt) % trackLengthM +
+            trackLengthM) %
+          trackLengthM;
+        const u = sim.distanceM / trackLengthM;
+        evaluateSplineKinematics(curve, u, _kinematics);
+
+        sim.derailLateralM += sim.derailLateralVelMs * dt;
+
+        // Si no salta la valla, choca y rebota contra el guardarrail metálico Armco (±3.92 m)
+        if (
+          !sim.derailVaultedBarrier &&
+          Math.abs(sim.derailLateralM) >= ARMCO_BARRIER_LIMIT_M
+        ) {
+          sim.derailLateralM =
+            Math.sign(sim.derailLateralM) * ARMCO_BARRIER_LIMIT_M;
+          if (Math.abs(sim.derailLateralVelMs) > 1.2) {
+            sim.derailLateralVelMs = -sim.derailLateralVelMs * 0.42;
+            sim.derailForwardSpeedMs *= 0.68;
+            sim.derailYawVelRad =
+              -sim.derailYawVelRad * 0.45 +
+              Math.sign(sim.derailLateralM) * 4.8;
+            vis.guideStress = 1.0;
+          } else {
+            sim.derailLateralVelMs = 0;
+          }
+        }
+
+        // Fricción de neumáticos cruzados sobre el asfalto
+        sim.derailForwardSpeedMs = Math.max(
           0,
-          currentSlipSpeed - GRAVEL_DECEL_MS2 * dt
+          sim.derailForwardSpeedMs - 17.5 * dt
         );
-        sim.derailVelocity.multiplyScalar(nextSlipSpeed / currentSlipSpeed);
+        sim.derailLateralVelMs = THREE.MathUtils.lerp(
+          sim.derailLateralVelMs,
+          0,
+          1 - Math.exp(-3.4 * dt)
+        );
+
+        // Gravedad vertical sobre el tablero de la pista (bote al desenganchar la guía)
+        sim.derailVerticalVelMs -= 18.5 * dt;
+        sim.derailVerticalY += sim.derailVerticalVelMs * dt;
+        if (sim.derailVerticalY <= _kinematics.position.y) {
+          sim.derailVerticalY = _kinematics.position.y;
+          sim.derailVerticalVelMs =
+            Math.abs(sim.derailVerticalVelMs) > 0.9
+              ? -sim.derailVerticalVelMs * 0.28
+              : 0;
+        }
+
+        sim.derailPosition
+          .copy(_kinematics.position)
+          .addScaledVector(_kinematics.right, sim.derailLateralM);
+        sim.derailPosition.y = sim.derailVerticalY;
+
+        carGroup.position.copy(sim.derailPosition);
+        _lookTarget.copy(sim.derailPosition).add(_kinematics.tangent);
+        carGroup.up.copy(_worldUp);
+        carGroup.lookAt(_lookTarget);
+
+        sim.derailYawAngleRad += sim.derailYawVelRad * dt;
+        sim.derailYawVelRad = THREE.MathUtils.lerp(
+          sim.derailYawVelRad,
+          0,
+          1 - Math.exp(-3.0 * dt)
+        );
+        vis.driftYawRad = sim.derailYawAngleRad;
+
+        const targetRoll = THREE.MathUtils.clamp(
+          sim.derailLateralVelMs * 0.045,
+          -0.28,
+          0.28
+        );
+        vis.bodyRollRad = THREE.MathUtils.lerp(
+          vis.bodyRollRad,
+          targetRoll,
+          1 - Math.exp(-10 * dt)
+        );
+        vis.bodyPitchRad = THREE.MathUtils.lerp(
+          vis.bodyPitchRad ?? 0,
+          0,
+          1 - Math.exp(-8 * dt)
+        );
+
+        // Actualizar vector 3D de velocidad por si acaba de cruzar el límite del guardarrail hacia el vacío
+        sim.derailVelocity
+          .copy(_kinematics.tangent)
+          .multiplyScalar(sim.derailForwardSpeedMs)
+          .addScaledVector(_kinematics.right, sim.derailLateralVelMs);
+        sim.derailVelocity.y = sim.derailVerticalVelMs;
+
+        sim.speedMs = Math.hypot(
+          sim.derailForwardSpeedMs,
+          sim.derailLateralVelMs
+        );
+      } else {
+        // FASE DE CAÍDA LIBRE FUERA DE PISTA: El coche superó el guardarrail y cae con gravedad real (g) hacia el suelo/viaducto inferior
+        const groundFloorY = -0.14;
+        sim.derailVelocity.y -= 16.8 * dt;
+        sim.derailPosition.addScaledVector(sim.derailVelocity, dt);
+
+        if (sim.derailPosition.y <= groundFloorY) {
+          sim.derailPosition.y = groundFloorY;
+          if (sim.derailVelocity.y < -1.2) {
+            sim.derailVelocity.y = -sim.derailVelocity.y * 0.34;
+            sim.derailRollVelRad *= 0.55;
+            sim.derailPitchVelRad *= 0.55;
+          } else {
+            sim.derailVelocity.y = 0;
+            sim.derailRollVelRad = THREE.MathUtils.lerp(
+              sim.derailRollVelRad,
+              0,
+              1 - Math.exp(-8 * dt)
+            );
+            sim.derailPitchVelRad = THREE.MathUtils.lerp(
+              sim.derailPitchVelRad,
+              0,
+              1 - Math.exp(-8 * dt)
+            );
+          }
+
+          // Fricción fuerte contra el terreno inferior
+          const horizSpeed = Math.hypot(
+            sim.derailVelocity.x,
+            sim.derailVelocity.z
+          );
+          if (horizSpeed > 0.05) {
+            const nextHoriz = Math.max(0, horizSpeed - GRAVEL_DECEL_MS2 * dt);
+            const scale = nextHoriz / horizSpeed;
+            sim.derailVelocity.x *= scale;
+            sim.derailVelocity.z *= scale;
+          }
+        }
+
+        carGroup.position.copy(sim.derailPosition);
+        sim.derailYawAngleRad += sim.derailYawVelRad * dt;
+        sim.derailYawVelRad = THREE.MathUtils.lerp(
+          sim.derailYawVelRad,
+          0,
+          1 - Math.exp(-2.2 * dt)
+        );
+        vis.driftYawRad = sim.derailYawAngleRad;
+        vis.bodyRollRad += sim.derailRollVelRad * dt;
+        vis.bodyPitchRad =
+          (vis.bodyPitchRad ?? 0) + sim.derailPitchVelRad * dt;
+
+        sim.speedMs = sim.derailVelocity.length();
       }
 
-      carGroup.position.copy(sim.derailPosition);
-      carGroup.rotateY(5.0 * dt * Math.min(1, currentSlipSpeed / 12));
-
-      sim.speedMs = currentSlipSpeed;
       currentCentrifugalForceN = sim.peakDerailForceN;
       gripRatio =
         currentDynamicGripN > 0
@@ -773,6 +966,7 @@ export function PhysicsCar() {
         sim.speedMs = 0;
         sim.gear = 1;
         sim.guideStress = 0;
+        sim.derailVaultedBarrier = false;
         vis.bodyRollRad = 0;
         vis.bodyPitchRad = 0;
         vis.driftYawRad = 0;

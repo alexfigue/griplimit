@@ -675,6 +675,41 @@ function TabletopLivingRoomDiorama() {
   );
 }
 
+function createTerrainDetailTexture(): THREE.CanvasTexture | null {
+  if (typeof document === 'undefined') return null;
+  const size = 256;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+
+  ctx.fillStyle = '#D8D8D8';
+  ctx.fillRect(0, 0, size, size);
+
+  const img = ctx.getImageData(0, 0, size, size);
+  const d = img.data;
+  const rand = createSeededRandom(31415);
+
+  for (let i = 0; i < size * size; i++) {
+    const idx = i * 4;
+    const n = (rand() - 0.5) * 48 + (rand() > 0.88 ? 22 : 0);
+    const v = Math.max(120, Math.min(255, 215 + n));
+    d[idx] = v;
+    d[idx + 1] = v;
+    d[idx + 2] = v;
+  }
+  ctx.putImageData(img, 0, 0);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(42, 34);
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  return tex;
+}
+
 /**
  * Gestor completo del entorno 3D para los 3 circuitos (Montmeló GP, Sierra Seca y Neo-Wangan)
  * + Modo Maqueta de Salón [Tecla E].
@@ -690,6 +725,7 @@ export function EnvironmentScenery() {
     () => buildBiomeTerrainGeometry(trackId, lut),
     [trackId, lut]
   );
+  const terrainDetailTex = useMemo(() => createTerrainDetailTexture(), []);
   const propTransforms = useMemo(
     () =>
       generateInstancedPropTransforms(
@@ -759,6 +795,9 @@ export function EnvironmentScenery() {
         <mesh geometry={terrainGeo} receiveShadow>
           <meshStandardMaterial
             vertexColors
+            map={terrainDetailTex}
+            bumpMap={terrainDetailTex}
+            bumpScale={0.04}
             roughness={isRain ? 0.45 : 0.86}
             metalness={isRain ? 0.35 : 0.18}
           />
@@ -824,6 +863,9 @@ export function EnvironmentScenery() {
       <mesh geometry={terrainGeo} receiveShadow>
         <meshStandardMaterial
           vertexColors
+          map={terrainDetailTex}
+          bumpMap={terrainDetailTex}
+          bumpScale={0.08}
           roughness={isRain ? 0.65 : 0.94}
         />
       </mesh>

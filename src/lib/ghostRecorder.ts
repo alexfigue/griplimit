@@ -107,15 +107,29 @@ export class ActiveLapGhostBuffer {
   }
 }
 
+const VALID_PRO_CAR_PATHS = new Set<string>([
+  '/cars/gt3-enduro-pro.glb',
+  '/cars/lambo-razor-pro.glb',
+  '/cars/hyper-specter-pro.glb',
+  '/cars/skyline-kaido-pro.glb',
+  '/cars/lemans-apogee-pro.glb',
+  '/cars/jdm-touge-pro.glb',
+  '/cars/f1-monoposto-pro.glb',
+]);
+
+function normalizeGhostModelPath(path?: string): string {
+  if (!path) return '/cars/gt3-enduro-pro.glb';
+  if (VALID_PRO_CAR_PATHS.has(path)) return path;
+  return '/cars/gt3-enduro-pro.glb';
+}
+
 export function saveBestGhostForTrack(ghost: SavedGhostLap): void {
   bestGhostMemoryCache[ghost.trackId] = ghost;
 
   if (typeof window === 'undefined') return;
   try {
-    // Guardamos solo si es una carrocería estática (los blob: URLs son efímeros de sesión, usan fallback)
-    const persistedPath = ghost.modelPath.startsWith('blob:')
-      ? '/cars/aero-saber.glb'
-      : ghost.modelPath;
+    // Guardamos solo si es una carrocería estática Pro (los blob: URLs son efímeros de sesión, usan fallback)
+    const persistedPath = normalizeGhostModelPath(ghost.modelPath);
     const payload = {
       lapTimeMs: Math.round(ghost.lapTimeMs),
       modelPath: persistedPath,
@@ -152,7 +166,7 @@ export function getBestGhostForTrack(trackId: TrackId): SavedGhostLap | null {
     const hydrated: SavedGhostLap = {
       trackId,
       lapTimeMs: parsed.lapTimeMs,
-      modelPath: parsed.modelPath || '/cars/aero-saber.glb',
+      modelPath: normalizeGhostModelPath(parsed.modelPath),
       modelYawOffsetRad: parsed.modelYawOffsetRad ?? 0,
       sampleCount: parsed.sampleCount,
       data: new Float32Array(parsed.arr),
