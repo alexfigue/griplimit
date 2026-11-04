@@ -88,6 +88,8 @@ interface InternalPhysicsState {
   turboStartTimerSec: number;
   overVoltCharge: number;
   overVoltTimerSec: number;
+  tireTempsC: [number, number, number, number];
+  tireThermalGripFactor: number;
   uiSyncAccumulatorSec: number;
 }
 
@@ -191,6 +193,8 @@ export function PhysicsCar() {
     turboStartTimerSec: 0,
     overVoltCharge: 0.5,
     overVoltTimerSec: 0,
+    tireTempsC: [58, 58, 58, 58],
+    tireThermalGripFactor: 0.96,
     uiSyncAccumulatorSec: 0,
   });
 
@@ -451,10 +455,23 @@ export function PhysicsCar() {
       );
     }
 
+    const isWoodFree = telemetryState.magnetMode === 'wood-free';
+    const magnetGripFactor = isWoodFree ? 0.8 : 1.0;
+    const effectiveDriftOnsetRatio = isWoodFree ? 0.72 : DRIFT_ONSET_GRIP_RATIO;
+    const effectiveDriftFullAngleRatio = isWoodFree
+      ? 1.52
+      : DRIFT_FULL_ANGLE_RATIO;
+    const effectiveDriftCeiling =
+      carStats.DriftCeilingRatio + (isWoodFree ? 0.36 : 0);
+    const maxVisualDriftYawRad = isWoodFree ? 0.82 : MAX_SLOT_DRIFT_YAW_RAD;
+
     let currentCentrifugalForceN = 0;
     let currentEffectiveRadiusM = Infinity;
     let currentDynamicGripN =
-      computeDynamicGripAtSpeed(carStats, sim.speedMs) * wetTireFactor;
+      computeDynamicGripAtSpeed(carStats, sim.speedMs) *
+      wetTireFactor *
+      magnetGripFactor *
+      sim.tireThermalGripFactor;
     let gripRatio = 0;
     let slopePercent = 0;
     let longitudinalNetAccel = 0;
@@ -475,8 +492,8 @@ export function PhysicsCar() {
       const preGripRatio =
         currentDynamicGripN > 0 ? preForceN / currentDynamicGripN : 0;
       const preDriftIntensity = THREE.MathUtils.clamp(
-        (preGripRatio - DRIFT_ONSET_GRIP_RATIO) /
-          (DRIFT_FULL_ANGLE_RATIO - DRIFT_ONSET_GRIP_RATIO),
+        (preGripRatio - effectiveDriftOnsetRatio) /
+          (effectiveDriftFullAngleRatio - effectiveDriftOnsetRatio),
         0,
         1
       );
@@ -648,7 +665,10 @@ export function PhysicsCar() {
         sim.lateralOffsetM
       );
       currentDynamicGripN =
-        computeDynamicGripAtSpeed(carStats, sim.speedMs) * wetTireFactor;
+        computeDynamicGripAtSpeed(carStats, sim.speedMs) *
+        wetTireFactor *
+        magnetGripFactor *
+        sim.tireThermalGripFactor;
 
       currentCentrifugalForceN = Number.isFinite(currentEffectiveRadiusM)
         ? (carStats.TotalWeight * (sim.speedMs * sim.speedMs)) /
@@ -660,11 +680,73 @@ export function PhysicsCar() {
           : 0;
 
       const driftIntensity = THREE.MathUtils.clamp(
-        (gripRatio - DRIFT_ONSET_GRIP_RATIO) /
-          (DRIFT_FULL_ANGLE_RATIO - DRIFT_ONSET_GRIP_RATIO),
+        (gripRatio - effectiveDriftOnsetRatio) /
+          (effectiveDriftFullAngleRatio - effectiveDriftOnsetRatio),
         0,
         1
       );
+
+      // SIMULACIÓN TÉRMICA DE LOS 4 NEUMÁTICOS [FL, FR, RL, RR] EN °C
+      if (!isWaitingAtGrid) {
+        const ambientEquilibriumC = isRain ? 36 : 48;
+        const airflowCoolRate =
+          (isRain ? 0.24 : 0.14) * (0.85 + sim.speedMs / 32);
+
+        // En curvas a izquierda (turnSign > 0) apoyan más las ruedas derechas (FR, RR) y viceversa
+        const leftCornerLoad =
+          _kinematics.turnSign < 0
+            ? 1.38
+            : _kinematics.turnSign > 0
+              ? 0.65
+              : 1.0;
+        const rightCornerLoad =
+          _kinematics.turnSign > 0
+            ? 1.38
+            : _kinematics.turnSign < 0
+              ? 0.65
+              : 1.0;
+
+        const baseCornerHeat =
+          Math.min(1.6, gripRatio) * (sim.speedMs / 28) * 8.4;
+        const frontBrakeHeat = brake * (sim.speedMs / 26) * 10.2;
+        const rearSlipHeat =
+          (driftIntensity * 21.0 + sim.smoothedThrottle * 3.4) *
+          (sim.speedMs / 25);
+
+        const heatInputs: [number, number, number, number] = [
+          baseCornerHeat * leftCornerLoad + frontBrakeHeat, // FL
+          baseCornerHeat * rightCornerLoad + frontBrakeHeat, // FR
+          baseCornerHeat * leftCornerLoad * 1.08 + rearSlipHeat, // RL
+          baseCornerHeat * rightCornerLoad * 1.08 + rearSlipHeat, // RR
+        ];
+
+        let sumTempC = 0;
+        for (let tIdx = 0; tIdx < 4; tIdx++) {
+          const curT = sim.tireTempsC[tIdx];
+          const coolDelta = (curT - ambientEquilibriumC) * airflowCoolRate;
+          const nextT = THREE.MathUtils.clamp(
+            curT + (heatInputs[tIdx] - coolDelta) * dt,
+            28,
+            132
+          );
+          sim.tireTempsC[tIdx] = nextT;
+          sumTempC += nextT;
+        }
+
+        const avgTempC = sumTempC / 4;
+        if (avgTempC < 65) {
+          sim.tireThermalGripFactor =
+            0.91 + 0.09 * THREE.MathUtils.clamp((avgTempC - 32) / 33, 0, 1);
+        } else if (avgTempC <= 98) {
+          sim.tireThermalGripFactor =
+            1.0 + 0.03 * Math.sin(((avgTempC - 65) / 33) * Math.PI);
+        } else {
+          sim.tireThermalGripFactor = Math.max(
+            0.84,
+            1.0 - ((avgTempC - 98) / 30) * 0.16
+          );
+        }
+      }
 
       if (driftIntensity > 0.12 && sim.speedMs > 5) {
         sim.driftScoreSecInLap += dt;
@@ -676,12 +758,12 @@ export function PhysicsCar() {
         }
       }
 
-      if (gripRatio >= carStats.DriftCeilingRatio) {
+      if (gripRatio >= effectiveDriftCeiling) {
         sim.guideStress = 1.0;
       } else if (gripRatio > 1.0) {
         const excessRatio = gripRatio - 1.0;
         const rollerMarginScale =
-          0.4 / Math.max(0.25, carStats.DriftCeilingRatio - 1.0);
+          0.4 / Math.max(0.25, effectiveDriftCeiling - 1.0);
         const throttleAbuseMultiplier = 0.7 + 1.15 * sim.smoothedThrottle;
         const stressBuildRate =
           (0.75 + excessRatio * 8.8 * rollerMarginScale) *
@@ -760,7 +842,7 @@ export function PhysicsCar() {
         carGroup.updateMatrixWorld();
 
         const targetDriftYaw =
-          -_kinematics.turnSign * driftIntensity * MAX_SLOT_DRIFT_YAW_RAD;
+          -_kinematics.turnSign * driftIntensity * maxVisualDriftYawRad;
         vis.driftYawRad = THREE.MathUtils.lerp(
           vis.driftYawRad,
           targetDriftYaw,
@@ -1183,6 +1265,13 @@ export function PhysicsCar() {
         gapToRivalM,
         playerRacePosition,
         rivalLapCount: liveRivalState.lapCount,
+        tireTempsC: [
+          Math.round(sim.tireTempsC[0]),
+          Math.round(sim.tireTempsC[1]),
+          Math.round(sim.tireTempsC[2]),
+          Math.round(sim.tireTempsC[3]),
+        ],
+        tireThermalGripFactor: Number(sim.tireThermalGripFactor.toFixed(2)),
       });
     }
   });

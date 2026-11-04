@@ -11,6 +11,7 @@ export type CameraMode = 'chase' | 'cockpit' | 'overhead';
 export type EnvironmentStyle = 'realistic' | 'tabletop';
 export type WeatherMode = 'dry' | 'rain';
 export type RaceMode = 'time-trial' | 'vs-ai';
+export type MagnetMode = 'gt-magnet' | 'wood-free';
 export type CupStartPhase = 'countdown' | 'green' | 'racing' | 'finished';
 export type BrakeAdviceLevel = 'clear' | 'coast' | 'brake';
 export type SectorColor = 'pending' | 'purple' | 'green' | 'amber';
@@ -187,11 +188,16 @@ export interface TelemetrySnapshot {
   readonly gapToRivalM: number;
   readonly playerRacePosition: 1 | 2;
   readonly rivalLapCount: number;
+  /** Temperaturas individuales de los 4 neumáticos [FL, FR, RL, RR] en °C */
+  readonly tireTempsC: readonly [number, number, number, number];
+  /** Multiplicador de agarre térmico actual (0.86 a 1.03) según ventana óptima (70-98 °C) */
+  readonly tireThermalGripFactor: number;
 }
 
 export interface TelemetryStoreState extends TelemetrySnapshot {
   readonly trackId: TrackId;
   readonly playerLane: LaneId;
+  readonly magnetMode: MagnetMode;
   readonly rivalEnabled: boolean;
   readonly ghostEnabled: boolean;
   readonly assistEnabled: boolean;
@@ -240,6 +246,7 @@ export interface TelemetryStoreState extends TelemetrySnapshot {
   ) => void;
   finishCupRace: (winner: 'player' | 'rival') => void;
   triggerOverVolt: () => void;
+  toggleMagnetMode: () => void;
   toggleWeatherMode: () => void;
   togglePlayerLane: () => void;
   toggleRival: () => void;

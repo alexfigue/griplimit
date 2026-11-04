@@ -455,6 +455,8 @@ const INITIAL_TELEMETRY_SNAPSHOT: TelemetrySnapshot = {
   gapToRivalM: 0,
   playerRacePosition: 1,
   rivalLapCount: 1,
+  tireTempsC: [56, 56, 56, 56],
+  tireThermalGripFactor: 0.96,
 };
 
 /**
@@ -478,6 +480,7 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
     ...INITIAL_TELEMETRY_SNAPSHOT,
     trackId: 'montmelo',
     playerLane: 'left',
+    magnetMode: 'gt-magnet',
     rivalEnabled: true,
     ghostEnabled: true,
     assistEnabled: true,
@@ -762,6 +765,11 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
     triggerOverVolt: () =>
       set((state) => ({
         overVoltTriggerNonce: state.overVoltTriggerNonce + 1,
+      })),
+
+    toggleMagnetMode: () =>
+      set((state) => ({
+        magnetMode: state.magnetMode === 'gt-magnet' ? 'wood-free' : 'gt-magnet',
       })),
 
     toggleWeatherMode: () =>

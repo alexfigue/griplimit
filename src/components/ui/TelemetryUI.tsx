@@ -72,6 +72,19 @@ function getMedalBannerClasses(medal: LapMedalGrade): {
   }
 }
 
+function getTireTempClasses(tempC: number): string {
+  if (tempC < 65) {
+    return 'border-sky-400/70 bg-sky-500/20 text-sky-200';
+  }
+  if (tempC <= 98) {
+    return 'border-emerald-400/80 bg-emerald-500/20 text-emerald-200';
+  }
+  if (tempC <= 108) {
+    return 'border-amber-400/80 bg-amber-500/25 text-amber-200';
+  }
+  return 'border-[#E63946] bg-[#E63946]/30 text-red-100';
+}
+
 const SHIFT_LIGHT_COUNT = 12;
 
 /**
@@ -89,6 +102,11 @@ export function TelemetryUI() {
   const cameraMode = useTelemetryStore((s) => s.cameraMode);
   const environmentStyle = useTelemetryStore((s) => s.environmentStyle);
   const weatherMode = useTelemetryStore((s) => s.weatherMode);
+  const magnetMode = useTelemetryStore((s) => s.magnetMode);
+  const tireTempsC = useTelemetryStore((s) => s.tireTempsC);
+  const tireThermalGripFactor = useTelemetryStore(
+    (s) => s.tireThermalGripFactor
+  );
 
   const raceMode = useTelemetryStore((s) => s.raceMode);
   const cupStartPhase = useTelemetryStore((s) => s.cupStartPhase);
@@ -130,6 +148,7 @@ export function TelemetryUI() {
 
   const setTrackId = useTelemetryStore((s) => s.setTrackId);
   const setRaceMode = useTelemetryStore((s) => s.setRaceMode);
+  const toggleMagnetMode = useTelemetryStore((s) => s.toggleMagnetMode);
   const toggleWeatherMode = useTelemetryStore((s) => s.toggleWeatherMode);
   const togglePlayerLane = useTelemetryStore((s) => s.togglePlayerLane);
   const toggleGhost = useTelemetryStore((s) => s.toggleGhost);
@@ -393,6 +412,21 @@ export function TelemetryUI() {
               className="rounded-xs border border-slate-700/70 bg-[#0D1117]/70 px-2.5 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-[#2F81F7]"
             >
               {cameraLabel}
+            </button>
+
+            <button
+              type="button"
+              onClick={toggleMagnetMode}
+              title="Alternar entre Imán Neodimio GT (pegado al raíl) y Modo Wood Sin Imán (derrapes largos y progresivos de costado) [Tecla I]"
+              className={`rounded-xs border px-2.5 py-1.5 text-xs font-bold transition-colors ${
+                magnetMode === 'wood-free'
+                  ? 'border-[#F59E0B]/80 bg-[#F59E0B]/20 text-amber-200'
+                  : 'border-emerald-400/70 bg-emerald-500/15 text-emerald-200 hover:border-emerald-300'
+              }`}
+            >
+              {magnetMode === 'gt-magnet'
+                ? '🧲 Imán GT [I]'
+                : '🪵 Sin Imán (Wood) [I]'}
             </button>
 
             <button
@@ -863,6 +897,44 @@ export function TelemetryUI() {
                   {Math.round(gripAvailable)} N
                 </span>
               </div>
+            </div>
+
+            {/* Indicador Térmico FIA de las 4 Ruedas (FL, FR, RL, RR) + Estado de Imán */}
+            <div className="mt-2.5 flex items-center justify-between gap-2 rounded-xs border border-slate-800/90 bg-[#0D1117]/80 px-2.5 py-1.5 font-mono text-[11px] tabular-nums">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase">
+                  Temp. Gomas:
+                </span>
+                {(
+                  [
+                    { label: 'DI', temp: tireTempsC[0] },
+                    { label: 'DD', temp: tireTempsC[1] },
+                    { label: 'TI', temp: tireTempsC[2] },
+                    { label: 'TD', temp: tireTempsC[3] },
+                  ] as const
+                ).map((w) => (
+                  <span
+                    key={w.label}
+                    className={`rounded-xs border px-1.5 py-0.5 text-[10px] font-bold transition-colors ${getTireTempClasses(
+                      w.temp
+                    )}`}
+                    title="Azul (<65°C Frío) · Verde (65-98°C Óptimo) · Ámbar/Rojo (>98°C Sobrecalentado)"
+                  >
+                    {w.label} {w.temp}°C
+                  </span>
+                ))}
+              </div>
+              <span
+                className={`text-[10px] font-bold ${
+                  tireThermalGripFactor >= 0.99
+                    ? 'text-emerald-400'
+                    : tireThermalGripFactor < 0.93
+                      ? 'text-[#E63946]'
+                      : 'text-sky-300'
+                }`}
+              >
+                Grip {Math.round(tireThermalGripFactor * 100)}%
+              </span>
             </div>
           </div>
         </section>

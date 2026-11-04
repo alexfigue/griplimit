@@ -99,6 +99,9 @@ export function useControls(): React.RefObject<DriverControlInputs> {
         case 'KeyV':
           useTelemetryStore.getState().toggleWeatherMode();
           break;
+        case 'KeyI':
+          useTelemetryStore.getState().toggleMagnetMode();
+          break;
       }
     };
 

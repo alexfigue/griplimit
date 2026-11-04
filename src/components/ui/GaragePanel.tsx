@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import { useGarageStore } from '@/store/store';
+import { useGarageStore, useTelemetryStore } from '@/store/store';
 import type { CustomAeroArchetype, PartCategory } from '@/types/types';
 
 type GarageTab = PartCategory | 'community';
@@ -60,6 +60,8 @@ export function GaragePanel() {
   const gpCredits = useGarageStore((s) => s.gpCredits);
   const unlockedPartIds = useGarageStore((s) => s.unlockedPartIds);
   const sandboxUnlocked = useGarageStore((s) => s.sandboxUnlocked);
+  const magnetMode = useTelemetryStore((s) => s.magnetMode);
+  const toggleMagnetMode = useTelemetryStore((s) => s.toggleMagnetMode);
 
   const selectOrBuyPart = useGarageStore((s) => s.selectOrBuyPart);
   const toggleSandboxUnlocked = useGarageStore((s) => s.toggleSandboxUnlocked);
@@ -247,9 +249,39 @@ export function GaragePanel() {
             <div>
               <span className="block text-[10px] text-slate-400">Techo derrape</span>
               <span className="font-semibold text-[#F59E0B]">
-                {Math.round(carStats.DriftCeilingRatio * 100)}%
+                {Math.round(
+                  (carStats.DriftCeilingRatio +
+                    (magnetMode === 'wood-free' ? 0.36 : 0)) *
+                    100
+                )}
+                %
               </span>
             </div>
+          </div>
+
+          {/* Selector de Reglaje de Imán de Neodimio en el Chasis */}
+          <div className="mt-2.5 flex items-center justify-between gap-2 rounded-xs border border-slate-800 bg-[#0D1117]/90 px-3 py-2">
+            <div>
+              <span className="block font-display text-xs font-bold text-[#F0F4F8]">
+                Reglaje de Imán de Chasis [I]
+              </span>
+              <span className="block text-[11px] text-slate-400">
+                {magnetMode === 'gt-magnet'
+                  ? 'Imán GT: Máximo apoyo vertical en curva rápida'
+                  : 'Modo Wood Sin Imán: Derrapes largos y progresivos de costado (+36% margen)'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={toggleMagnetMode}
+              className={`shrink-0 rounded-xs border px-2.5 py-1 font-mono text-[11px] font-bold transition-colors ${
+                magnetMode === 'gt-magnet'
+                  ? 'border-emerald-400/80 bg-emerald-500/20 text-emerald-200'
+                  : 'border-[#F59E0B]/80 bg-[#F59E0B]/20 text-amber-200'
+              }`}
+            >
+              {magnetMode === 'gt-magnet' ? '🧲 Imán GT' : '🪵 Wood Libre'}
+            </button>
           </div>
 
           {/* Pestañas de subsistemas Let's & Go + Comunidad .GLB */}
