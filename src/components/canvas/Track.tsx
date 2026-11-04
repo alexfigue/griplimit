@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import {
   DUAL_LANE_OFFSET_M,
@@ -20,28 +20,51 @@ const TRACK_SEGMENTS = 780;
 export const ASPHALT_HALF_WIDTH = 3.85;
 export const KERB_WIDTH = 0.65;
 export const GUARDRAIL_LATERAL_OFFSET_M = ASPHALT_HALF_WIDTH + KERB_WIDTH + 0.12;
+const GRAVEL_TRAP_WIDTH_M = 4.2;
 const SLOT_RAIL_HALF_WIDTH = 0.1;
 const CONDUCTOR_BRAID_HALF_WIDTH = 0.24;
 const LANE_OFFSETS = [-DUAL_LANE_OFFSET_M, DUAL_LANE_OFFSET_M] as const;
+
+export type BrakingBoardDistance = 150 | 100 | 50;
+
+export interface BrakingBoardPlacement {
+  distanceLabel: BrakingBoardDistance;
+  position: THREE.Vector3;
+  rotationY: number;
+}
+
+export interface TireStackPlacement {
+  position: THREE.Vector3;
+  rotationY: number;
+  isAccentTop: boolean;
+}
 
 interface ProceduralTrackTextures {
   asphaltMap: THREE.CanvasTexture | null;
   asphaltBumpMap: THREE.CanvasTexture | null;
   checkeredMap: THREE.CanvasTexture | null;
+  gravelMap: THREE.CanvasTexture | null;
+  boardMaps: Record<BrakingBoardDistance, THREE.CanvasTexture | null>;
 }
 
 /**
- * Genera texturas PBR procedurales de alta definición para el asfalto:
- * - Grano mineral de árido bituminoso + mapa de relieve (bumpMap).
- * - Líneas blancas continuas de límite de pista FIA en ambos márgenes.
- * - Huellas oscuras de caucho depositado en las zonas de apoyo de los 2 carriles.
- * - Textura de bandera a cuadros para la línea de meta.
+ * Genera texturas PBR procedurales de alta definición para el circuito:
+ * - Asfalto granulado con relieve, líneas blancas FIA y goma en trazada.
+ * - Textura de grava para las escapatorias exteriores.
+ * - Carteles oficiales FIA de distancia de frenada (150m, 100m, 50m).
+ * - Bandera a cuadros para la línea de meta.
  */
 function createProceduralTrackTextures(
   trackId: TrackId
 ): ProceduralTrackTextures {
   if (typeof document === 'undefined') {
-    return { asphaltMap: null, asphaltBumpMap: null, checkeredMap: null };
+    return {
+      asphaltMap: null,
+      asphaltBumpMap: null,
+      checkeredMap: null,
+      gravelMap: null,
+      boardMaps: { 150: null, 100: null, 50: null },
+    };
   }
 
   const width = 512;
@@ -60,36 +83,32 @@ function createProceduralTrackTextures(
   const isWangan = trackId === 'neo-wangan';
   const isSierra = trackId === 'sierra-seca';
 
+  let seed = trackId === 'montmelo' ? 1337 : isSierra ? 4201 : 9001;
+  const nextRand = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967296;
+  };
+
   if (ctx && bCtx) {
-    // 1. Base asfáltica según el circuito
     ctx.fillStyle = isWangan ? '#182030' : isSierra ? '#252830' : '#21262E';
     ctx.fillRect(0, 0, width, height);
 
     bCtx.fillStyle = '#808080';
     bCtx.fillRect(0, 0, width, height);
 
-    // 2. Micro-grano de árido mineral (determinista para evitar parpadeos)
     const imgData = ctx.getImageData(0, 0, width, height);
     const bumpData = bCtx.getImageData(0, 0, width, height);
     const d = imgData.data;
     const bd = bumpData.data;
 
-    let seed = trackId === 'montmelo' ? 1337 : isSierra ? 4201 : 9001;
-    const nextRand = () => {
-      seed = (seed * 1664525 + 1013904223) >>> 0;
-      return seed / 4294967296;
-    };
-
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
-        const u = x / width; // 0 = borde izq (-3.85m), 1 = borde der (+3.85m)
+        const u = x / width;
         const idx = (y * width + x) * 4;
 
         const grain = (nextRand() - 0.5) * 26;
         const fineSpeck = nextRand() > 0.92 ? 16 : nextRand() < 0.08 ? -14 : 0;
 
-        // Oscurecimiento por goma de neumáticos en las huellas de los 2 carriles
-        // Carril izq en u ≈ 0.338, carril der en u ≈ 0.662
         const distLaneL1 = Math.abs(u - 0.26);
         const distLaneL2 = Math.abs(u - 0.41);
         const distLaneR1 = Math.abs(u - 0.59);
@@ -121,15 +140,17 @@ function createProceduralTrackTextures(
     ctx.putImageData(imgData, 0, 0);
     bCtx.putImageData(bumpData, 0, 0);
 
-    // 3. Líneas blancas continuas de límite de pista (FIA Track Limits)
-    ctx.fillStyle = isWangan ? 'rgba(224, 242, 254, 0.9)' : 'rgba(241, 245, 249, 0.88)';
+    // Líneas blancas continuas de límite de pista FIA
+    ctx.fillStyle = isWangan
+      ? 'rgba(224, 242, 254, 0.9)'
+      : 'rgba(241, 245, 249, 0.88)';
     const lineLeftX = Math.round(width * 0.032);
     const lineRightX = Math.round(width * 0.952);
     const lineWidth = Math.round(width * 0.016);
     ctx.fillRect(lineLeftX, 0, lineWidth, height);
     ctx.fillRect(lineRightX, 0, lineWidth, height);
 
-    // 4. Línea divisoria central discontinua sutil entre los 2 carriles
+    // Línea divisoria central discontinua entre carriles
     ctx.fillStyle = isWangan
       ? 'rgba(56, 189, 248, 0.32)'
       : 'rgba(255, 255, 255, 0.22)';
@@ -150,7 +171,32 @@ function createProceduralTrackTextures(
   asphaltBumpMap.anisotropy = 8;
   asphaltBumpMap.needsUpdate = true;
 
-  // 5. Textura ajedrezada de línea de Salida / Meta
+  // Textura granular de Grava para las escapatorias (Gravel Traps)
+  const grvCanvas = document.createElement('canvas');
+  grvCanvas.width = 128;
+  grvCanvas.height = 128;
+  const gCtx = grvCanvas.getContext('2d');
+  if (gCtx) {
+    gCtx.fillStyle = isWangan ? '#1E293B' : isSierra ? '#B89772' : '#C8B99E';
+    gCtx.fillRect(0, 0, 128, 128);
+    const gImg = gCtx.getImageData(0, 0, 128, 128);
+    const gd = gImg.data;
+    for (let i = 0; i < 128 * 128; i++) {
+      const idx = i * 4;
+      const pebble = (nextRand() - 0.5) * 44;
+      gd[idx] = Math.max(0, Math.min(255, gd[idx] + pebble));
+      gd[idx + 1] = Math.max(0, Math.min(255, gd[idx + 1] + pebble));
+      gd[idx + 2] = Math.max(0, Math.min(255, gd[idx + 2] + pebble));
+    }
+    gCtx.putImageData(gImg, 0, 0);
+  }
+  const gravelMap = new THREE.CanvasTexture(grvCanvas);
+  gravelMap.wrapS = THREE.RepeatWrapping;
+  gravelMap.wrapT = THREE.RepeatWrapping;
+  gravelMap.anisotropy = 4;
+  gravelMap.needsUpdate = true;
+
+  // Textura ajedrezada de línea de Salida / Meta
   const chkCanvas = document.createElement('canvas');
   chkCanvas.width = 512;
   chkCanvas.height = 128;
@@ -171,16 +217,59 @@ function createProceduralTrackTextures(
   checkeredMap.anisotropy = 8;
   checkeredMap.needsUpdate = true;
 
-  return { asphaltMap, asphaltBumpMap, checkeredMap };
+  // Carteles de Frenada FIA (150m, 100m, 50m)
+  const buildBoardTex = (dist: BrakingBoardDistance): THREE.CanvasTexture => {
+    const bCan = document.createElement('canvas');
+    bCan.width = 256;
+    bCan.height = 192;
+    const bc = bCan.getContext('2d');
+    if (bc) {
+      bc.fillStyle = '#F8FAFC';
+      bc.fillRect(0, 0, 256, 192);
+
+      // Marco perimetral rojo/azul FIA
+      bc.lineWidth = 12;
+      bc.strokeStyle = isWangan ? '#06B6D4' : '#E63946';
+      bc.strokeRect(6, 6, 244, 180);
+
+      // Bandas superiores de referencia (3 barras = 150m, 2 barras = 100m, 1 barra = 50m)
+      const bars = dist === 150 ? 3 : dist === 100 ? 2 : 1;
+      bc.fillStyle = '#0F172A';
+      for (let b = 0; b < bars; b++) {
+        bc.fillRect(28 + b * 72, 22, 52, 14);
+      }
+
+      // Número de distancia de frenada
+      bc.fillStyle = '#0F172A';
+      bc.font = '900 84px sans-serif';
+      bc.textAlign = 'center';
+      bc.textBaseline = 'middle';
+      bc.fillText(`${dist}m`, 128, 118);
+    }
+    const tex = new THREE.CanvasTexture(bCan);
+    tex.anisotropy = 4;
+    tex.needsUpdate = true;
+    return tex;
+  };
+
+  return {
+    asphaltMap,
+    asphaltBumpMap,
+    checkeredMap,
+    gravelMap,
+    boardMaps: {
+      150: buildBoardTex(150),
+      100: buildBoardTex(100),
+      50: buildBoardTex(50),
+    },
+  };
 }
 
 /**
- * Construye las geometrías 3D del circuito de doble carril:
- * 1. Cinta de asfalto con coordenadas UV para textura PBR y mapa de relieve.
- * 2. Taludes estructurales / muros de hormigón bajo tramos elevados.
- * 3. Dos raíles guía paralelos (-1.25 m y +1.25 m) con sus trencillas conductoras metálicas.
- * 4. Pianos FIA 3D con relieve dentado en curvas.
- * 5. Barreras metálicas Armco de doble onda y postes de acero a ambos lados de la pista.
+ * Construye las geometrías 3D del circuito de doble carril y calcula las posiciones de:
+ * - Escapatorias de grava (Gravel Traps) en el exterior de las curvas críticas.
+ * - Barreras de neumáticos 3D rojiblancos (Tire Walls) junto al guardarrail exterior.
+ * - Carteles FIA de distancia de frenada (150m, 100m, 50m) antes de cada frenada fuerte.
  */
 function buildDualLaneTrackGeometries(
   curve: THREE.CatmullRomCurve3,
@@ -208,6 +297,13 @@ function buildDualLaneTrackGeometries(
   const guardrailColors: number[] = [];
   const guardrailIndices: number[] = [];
 
+  const gravelPositions: number[] = [];
+  const gravelUvs: number[] = [];
+  const gravelIndices: number[] = [];
+
+  const tireStackPlacements: TireStackPlacement[] = [];
+  const brakingBoards: BrakingBoardPlacement[] = [];
+
   const sampleBuffer: SplineKinematicsResult = {
     position: new THREE.Vector3(),
     tangent: new THREE.Vector3(),
@@ -217,6 +313,67 @@ function buildDualLaneTrackGeometries(
     curvatureRadius: Infinity,
     turnSign: 0,
   };
+
+  // Pre-muestreamos los 780 segmentos para poder colocar carteles de frenada hacia atrás respecto al inicio de curva
+  const preSamples: Array<{
+    pos: THREE.Vector3;
+    tangent: THREE.Vector3;
+    right: THREE.Vector3;
+    outRightSign: 1 | -1;
+    curvatureRadius: number;
+  }> = [];
+
+  for (let i = 0; i <= TRACK_SEGMENTS; i++) {
+    const u = (i % TRACK_SEGMENTS) / TRACK_SEGMENTS;
+    evaluateSplineKinematics(curve, u, sampleBuffer);
+    const outRightSign: 1 | -1 =
+      sampleBuffer.outwardNormal.dot(sampleBuffer.right) >= 0 ? 1 : -1;
+    preSamples.push({
+      pos: sampleBuffer.position.clone(),
+      tangent: sampleBuffer.tangent.clone(),
+      right: sampleBuffer.right.clone(),
+      outRightSign,
+      curvatureRadius: sampleBuffer.curvatureRadius,
+    });
+  }
+
+  // Detectar puntos de entrada a curvas fuertes (donde el radio cae por debajo de 38 m tras una recta/zona rápida)
+  let lastBrakingZoneIdx = -999;
+  for (let i = 18; i < TRACK_SEGMENTS - 18; i++) {
+    const prevR = preSamples[(i - 8 + TRACK_SEGMENTS) % TRACK_SEGMENTS].curvatureRadius;
+    const curR = preSamples[i].curvatureRadius;
+    if (
+      curR < 38 &&
+      prevR > 48 &&
+      i - lastBrakingZoneIdx >= 58
+    ) {
+      lastBrakingZoneIdx = i;
+      const outSign = preSamples[i].outRightSign;
+
+      const markerOffsets: Array<{ segBack: number; label: BrakingBoardDistance }> = [
+        { segBack: 30, label: 150 },
+        { segBack: 20, label: 100 },
+        { segBack: 10, label: 50 },
+      ];
+
+      for (const m of markerOffsets) {
+        const sIdx = (i - m.segBack + TRACK_SEGMENTS) % TRACK_SEGMENTS;
+        const node = preSamples[sIdx];
+        const boardPos = node.pos
+          .clone()
+          .addScaledVector(
+            node.right,
+            outSign * (GUARDRAIL_LATERAL_OFFSET_M + 1.05)
+          );
+        const angleY = Math.atan2(node.tangent.x, node.tangent.z) + Math.PI;
+        brakingBoards.push({
+          distanceLabel: m.label,
+          position: boardPos,
+          rotationY: angleY,
+        });
+      }
+    }
+  }
 
   const isWangan = trackId === 'neo-wangan';
   const accentKerb = new THREE.Color(isWangan ? '#06B6D4' : '#E63946');
@@ -228,6 +385,7 @@ function buildDualLaneTrackGeometries(
 
   let kerbQuadCount = 0;
   let guardrailQuadCount = 0;
+  let gravelQuadCount = 0;
 
   const prevLeftInner = new THREE.Vector3();
   const prevLeftOuter = new THREE.Vector3();
@@ -238,6 +396,11 @@ function buildDualLaneTrackGeometries(
   const prevGuardLeftTop = new THREE.Vector3();
   const prevGuardRightBottom = new THREE.Vector3();
   const prevGuardRightTop = new THREE.Vector3();
+
+  const prevGravelLeftInner = new THREE.Vector3();
+  const prevGravelLeftOuter = new THREE.Vector3();
+  const prevGravelRightInner = new THREE.Vector3();
+  const prevGravelRightOuter = new THREE.Vector3();
 
   let hasPrevSample = false;
 
@@ -292,12 +455,48 @@ function buildDualLaneTrackGeometries(
     );
   };
 
-  for (let i = 0; i <= TRACK_SEGMENTS; i++) {
-    const u = (i % TRACK_SEGMENTS) / TRACK_SEGMENTS;
-    evaluateSplineKinematics(curve, u, sampleBuffer);
+  const appendUvQuad = (
+    positions: number[],
+    uvs: number[],
+    indices: number[],
+    quadIndex: number,
+    a: THREE.Vector3,
+    b: THREE.Vector3,
+    c: THREE.Vector3,
+    d: THREE.Vector3,
+    v0: number,
+    v1: number
+  ) => {
+    const vOffset = quadIndex * 4;
+    positions.push(
+      a.x,
+      a.y,
+      a.z,
+      b.x,
+      b.y,
+      b.z,
+      c.x,
+      c.y,
+      c.z,
+      d.x,
+      d.y,
+      d.z
+    );
+    uvs.push(0, v0, 1, v0, 0, v1, 1, v1);
+    indices.push(
+      vOffset,
+      vOffset + 1,
+      vOffset + 2,
+      vOffset + 1,
+      vOffset + 3,
+      vOffset + 2
+    );
+  };
 
-    const pos = sampleBuffer.position;
-    const rightVec = sampleBuffer.right;
+  for (let i = 0; i <= TRACK_SEGMENTS; i++) {
+    const node = preSamples[i];
+    const pos = node.pos;
+    const rightVec = node.right;
 
     const leftEdge = pos.clone().addScaledVector(rightVec, -ASPHALT_HALF_WIDTH);
     const rightEdge = pos.clone().addScaledVector(rightVec, ASPHALT_HALF_WIDTH);
@@ -397,7 +596,6 @@ function buildDualLaneTrackGeometries(
       }
     }
 
-    // Pianos FIA con relieve dentado 3D (sawtooth)
     const sawtooth = i % 2 === 0 ? 0.014 : 0;
     const curLeftInner = leftEdge.clone();
     const curLeftOuter = pos
@@ -413,7 +611,6 @@ function buildDualLaneTrackGeometries(
     curRightInner.y += 0.022;
     curRightOuter.y += 0.055 + sawtooth;
 
-    // Barreras metálicas exteriores Armco (borde de contención de pista)
     const curGuardLeftBottom = pos
       .clone()
       .addScaledVector(rightVec, -GUARDRAIL_LATERAL_OFFSET_M);
@@ -428,8 +625,33 @@ function buildDualLaneTrackGeometries(
     curGuardRightBottom.y += 0.08;
     curGuardRightTop.y += 0.48;
 
+    // Escapatorias de grava detrás del piano / guardarrail exterior
+    const curGravelLeftInner = pos
+      .clone()
+      .addScaledVector(rightVec, -(ASPHALT_HALF_WIDTH + KERB_WIDTH));
+    const curGravelLeftOuter = pos
+      .clone()
+      .addScaledVector(
+        rightVec,
+        -(ASPHALT_HALF_WIDTH + KERB_WIDTH + GRAVEL_TRAP_WIDTH_M)
+      );
+    curGravelLeftInner.y += 0.01;
+    curGravelLeftOuter.y += 0.03;
+
+    const curGravelRightInner = pos
+      .clone()
+      .addScaledVector(rightVec, ASPHALT_HALF_WIDTH + KERB_WIDTH);
+    const curGravelRightOuter = pos
+      .clone()
+      .addScaledVector(
+        rightVec,
+        ASPHALT_HALF_WIDTH + KERB_WIDTH + GRAVEL_TRAP_WIDTH_M
+      );
+    curGravelRightInner.y += 0.01;
+    curGravelRightOuter.y += 0.03;
+
     if (hasPrevSample) {
-      if (sampleBuffer.curvatureRadius < 92) {
+      if (node.curvatureRadius < 92) {
         const isAccentBlock = Math.floor(i / 2) % 2 === 0;
         const stripeColor = isAccentBlock ? accentKerb : whiteKerb;
 
@@ -457,8 +679,7 @@ function buildDualLaneTrackGeometries(
         );
       }
 
-      // En curvas cerradas pintamos chevrons de advertencia sobre la barrera Armco; en recta acero galvanizado
-      const isSharpCorner = sampleBuffer.curvatureRadius < 42;
+      const isSharpCorner = node.curvatureRadius < 42;
       const barrierTopColor = isSharpCorner
         ? Math.floor(i / 3) % 2 === 0
           ? chevronAccentColor
@@ -489,6 +710,55 @@ function buildDualLaneTrackGeometries(
         barrierTopColor,
         steelDarkColor
       );
+
+      // En curvas críticas añadimos Escapatoria de Grava y Muros de Neumáticos rojiblancos en el lado exterior
+      if (isSharpCorner) {
+        const gv0 = ((i - 1) / TRACK_SEGMENTS) * 65;
+        const gv1 = (i / TRACK_SEGMENTS) * 65;
+
+        if (node.outRightSign < 0) {
+          appendUvQuad(
+            gravelPositions,
+            gravelUvs,
+            gravelIndices,
+            gravelQuadCount++,
+            prevGravelLeftOuter,
+            prevGravelLeftInner,
+            curGravelLeftOuter,
+            curGravelLeftInner,
+            gv0,
+            gv1
+          );
+        } else {
+          appendUvQuad(
+            gravelPositions,
+            gravelUvs,
+            gravelIndices,
+            gravelQuadCount++,
+            prevGravelRightInner,
+            prevGravelRightOuter,
+            curGravelRightInner,
+            curGravelRightOuter,
+            gv0,
+            gv1
+          );
+        }
+
+        // Pilas de neumáticos 3D cada 2 segmentos pegadas a la barrera exterior
+        if (i % 2 === 0 && i > 12 && i < TRACK_SEGMENTS - 12) {
+          const tirePos = pos
+            .clone()
+            .addScaledVector(
+              rightVec,
+              node.outRightSign * (GUARDRAIL_LATERAL_OFFSET_M - 0.34)
+            );
+          tireStackPlacements.push({
+            position: tirePos,
+            rotationY: Math.atan2(node.tangent.x, node.tangent.z),
+            isAccentTop: Math.floor(i / 2) % 2 === 0,
+          });
+        }
+      }
     }
 
     prevLeftInner.copy(curLeftInner);
@@ -500,6 +770,12 @@ function buildDualLaneTrackGeometries(
     prevGuardLeftTop.copy(curGuardLeftTop);
     prevGuardRightBottom.copy(curGuardRightBottom);
     prevGuardRightTop.copy(curGuardRightTop);
+
+    prevGravelLeftInner.copy(curGravelLeftInner);
+    prevGravelLeftOuter.copy(curGravelLeftOuter);
+    prevGravelRightInner.copy(curGravelRightInner);
+    prevGravelRightOuter.copy(curGravelRightOuter);
+
     hasPrevSample = true;
   }
 
@@ -561,6 +837,18 @@ function buildDualLaneTrackGeometries(
   guardrailGeo.setIndex(guardrailIndices);
   guardrailGeo.computeVertexNormals();
 
+  const gravelGeo = new THREE.BufferGeometry();
+  gravelGeo.setAttribute(
+    'position',
+    new THREE.Float32BufferAttribute(gravelPositions, 3)
+  );
+  gravelGeo.setAttribute(
+    'uv',
+    new THREE.Float32BufferAttribute(gravelUvs, 2)
+  );
+  gravelGeo.setIndex(gravelIndices);
+  gravelGeo.computeVertexNormals();
+
   const startPos = curve.getPointAt(0);
   const startTangent = curve.getTangentAt(0);
   const startAngleY = Math.atan2(startTangent.x, startTangent.z);
@@ -572,16 +860,259 @@ function buildDualLaneTrackGeometries(
     railGeo,
     kerbGeo,
     guardrailGeo,
+    gravelGeo,
+    tireStackPlacements,
+    brakingBoards,
     startPos,
     startAngleY,
   };
 }
 
 /**
+ * Muros de neumáticos de protección FIA (InstancedMesh de 2 capas alternando Rojo/Cian y Blanco).
+ */
+function TireWallBarriers({
+  placements,
+  isWangan,
+}: {
+  placements: TireStackPlacement[];
+  isWangan: boolean;
+}) {
+  const bottomTiresRef = useRef<THREE.InstancedMesh>(null);
+  const topTiresRef = useRef<THREE.InstancedMesh>(null);
+
+  useLayoutEffect(() => {
+    const bottomMesh = bottomTiresRef.current;
+    const topMesh = topTiresRef.current;
+    if (!bottomMesh || !topMesh || placements.length === 0) return;
+
+    const dummy = new THREE.Object3D();
+    const accentCol = new THREE.Color(isWangan ? '#06B6D4' : '#E63946');
+    const whiteCol = new THREE.Color('#F8FAFC');
+
+    placements.forEach((p, idx) => {
+      dummy.position.set(p.position.x, p.position.y + 0.14, p.position.z);
+      dummy.rotation.set(0, p.rotationY, 0);
+      dummy.updateMatrix();
+      bottomMesh.setMatrixAt(idx, dummy.matrix);
+      bottomMesh.setColorAt(idx, p.isAccentTop ? whiteCol : accentCol);
+
+      dummy.position.set(p.position.x, p.position.y + 0.36, p.position.z);
+      dummy.updateMatrix();
+      topMesh.setMatrixAt(idx, dummy.matrix);
+      topMesh.setColorAt(idx, p.isAccentTop ? accentCol : whiteCol);
+    });
+
+    bottomMesh.instanceMatrix.needsUpdate = true;
+    if (bottomMesh.instanceColor) bottomMesh.instanceColor.needsUpdate = true;
+    topMesh.instanceMatrix.needsUpdate = true;
+    if (topMesh.instanceColor) topMesh.instanceColor.needsUpdate = true;
+  }, [placements, isWangan]);
+
+  if (placements.length === 0) return null;
+
+  return (
+    <group>
+      <instancedMesh
+        ref={bottomTiresRef}
+        args={[undefined, undefined, placements.length]}
+        castShadow
+        receiveShadow
+      >
+        <cylinderGeometry args={[0.32, 0.32, 0.22, 14]} />
+        <meshStandardMaterial roughness={0.78} metalness={0.05} />
+      </instancedMesh>
+      <instancedMesh
+        ref={topTiresRef}
+        args={[undefined, undefined, placements.length]}
+        castShadow
+        receiveShadow
+      >
+        <cylinderGeometry args={[0.32, 0.32, 0.22, 14]} />
+        <meshStandardMaterial roughness={0.78} metalness={0.05} />
+      </instancedMesh>
+    </group>
+  );
+}
+
+/**
+ * Complejo 3D de Edificio de Boxes (Pit-Lane Garages + Paddock Club VIP) y Torre Oficial de Clasificación.
+ */
+function F1PitBuildingAndTimingTower({
+  isWangan,
+  isSierra,
+}: {
+  isWangan: boolean;
+  isSierra: boolean;
+}) {
+  const accentHex = isWangan ? '#06B6D4' : isSierra ? '#2F81F7' : '#E63946';
+
+  return (
+    <group>
+      {/* 1. EDIFICIO DE BOXES Y PIT-LANE (a la izquierda de la recta principal) */}
+      <group position={[-ASPHALT_HALF_WIDTH - 6.4, 0, -5]}>
+        {/* Plataforma de cemento del Pit-Lane */}
+        <mesh position={[2.2, 0.02, 0]} receiveShadow>
+          <boxGeometry args={[7.5, 0.06, 44]} />
+          <meshStandardMaterial color="#1E293B" roughness={0.75} />
+        </mesh>
+
+        {/* Muro de Pit-Wall junto a la pista con cabina de telemetría de ingenieros */}
+        <mesh position={[4.6, 0.65, 0]} castShadow receiveShadow>
+          <boxGeometry args={[0.38, 1.3, 38]} />
+          <meshStandardMaterial
+            color="#334155"
+            roughness={0.5}
+            metalness={0.3}
+          />
+        </mesh>
+        <mesh position={[4.5, 1.35, 0]}>
+          <boxGeometry args={[0.42, 0.16, 38.2]} />
+          <meshStandardMaterial color={accentHex} roughness={0.35} />
+        </mesh>
+
+        {/* Estructura principal del edificio de garajes (Planta Baja + Planta VIP) */}
+        <mesh position={[-1.4, 2.8, 0]} castShadow receiveShadow>
+          <boxGeometry args={[5.2, 5.6, 40]} />
+          <meshStandardMaterial
+            color="#0F172A"
+            roughness={0.42}
+            metalness={0.45}
+          />
+        </mesh>
+
+        {/* 6 Boxes de Escuderías abiertos con iluminación interior LED de techo */}
+        {([-15, -9, -3, 3, 9, 15] as const).map((gz, idx) => (
+          <group key={gz} position={[1.15, 0, gz]}>
+            {/* Interior iluminado del garaje */}
+            <mesh position={[-0.35, 1.35, 0]}>
+              <boxGeometry args={[0.8, 2.5, 4.6]} />
+              <meshStandardMaterial
+                color="#1E293B"
+                emissive={idx % 2 === 0 ? '#E0F2FE' : '#FEF3C7'}
+                emissiveIntensity={0.45}
+                roughness={0.4}
+              />
+            </mesh>
+            {/* Panel LED de techo de box */}
+            <mesh position={[0.02, 2.48, 0]}>
+              <boxGeometry args={[0.35, 0.08, 4.2]} />
+              <meshStandardMaterial
+                color="#FFFFFF"
+                emissive="#E0F2FE"
+                emissiveIntensity={2.8}
+              />
+            </mesh>
+            {/* Columna divisoria entre garajes */}
+            <mesh position={[0.1, 1.4, 2.6]} castShadow>
+              <boxGeometry args={[0.45, 2.8, 0.55]} />
+              <meshStandardMaterial
+                color="#E2E8F0"
+                metalness={0.5}
+                roughness={0.3}
+              />
+            </mesh>
+          </group>
+        ))}
+
+        {/* Franja corporativa entre planta de boxes y terraza Paddock Club */}
+        <mesh position={[1.28, 3.05, 0]} castShadow>
+          <boxGeometry args={[0.35, 0.48, 40.4]} />
+          <meshStandardMaterial
+            color={accentHex}
+            emissive={isWangan ? '#0891B2' : '#000000'}
+            emissiveIntensity={isWangan ? 0.65 : 0}
+            roughness={0.3}
+          />
+        </mesh>
+
+        {/* Cristaleras panorámicas del Paddock Club (Planta Superior) */}
+        <mesh position={[1.26, 4.35, 0]}>
+          <boxGeometry args={[0.18, 1.9, 39.2]} />
+          <meshPhysicalMaterial
+            color="#0EA5E9"
+            metalness={0.25}
+            roughness={0.08}
+            clearcoat={1}
+            transparent
+            opacity={0.72}
+          />
+        </mesh>
+
+        {/* Visera aerodinámica voladiza en la cubierta del edificio de boxes */}
+        <mesh position={[0.2, 5.8, 0]} rotation={[0, 0, -0.08]} castShadow>
+          <boxGeometry args={[7.4, 0.36, 41.6]} />
+          <meshStandardMaterial
+            color="#F8FAFC"
+            metalness={0.35}
+            roughness={0.35}
+          />
+        </mesh>
+      </group>
+
+      {/* 2. TORRE VERTICAL DE CLASIFICACIÓN FIA (a la derecha de la línea de meta) */}
+      <group position={[ASPHALT_HALF_WIDTH + 2.8, 0, 3.8]}>
+        {/* Pedestal de hormigón */}
+        <mesh position={[0, 0.6, 0]} castShadow receiveShadow>
+          <boxGeometry args={[1.8, 1.2, 1.8]} />
+          <meshStandardMaterial color="#1E293B" roughness={0.6} />
+        </mesh>
+
+        {/* Cuerpo vertical del monolito de cronometraje */}
+        <mesh position={[0, 7.2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[1.15, 12.6, 0.92]} />
+          <meshStandardMaterial
+            color="#0B0F17"
+            metalness={0.65}
+            roughness={0.25}
+          />
+        </mesh>
+
+        {/* Corona luminosa superior de la torre */}
+        <mesh position={[0, 13.7, 0]} castShadow>
+          <boxGeometry args={[1.45, 0.75, 1.15]} />
+          <meshStandardMaterial
+            color={accentHex}
+            emissive={accentHex}
+            emissiveIntensity={1.6}
+            roughness={0.2}
+          />
+        </mesh>
+
+        {/* Módulos LED de posiciones (P1 a P6) en ambas caras de la torre */}
+        {[11.6, 10.2, 8.8, 7.4, 6.0, 4.6].map((py, posIdx) => (
+          <group key={py} position={[0, py, 0]}>
+            {/* Indicador de posición (Rojo/Cian para P1, Ámbar/Blanco resto) */}
+            <mesh position={[-0.26, 0, -0.48]}>
+              <planeGeometry args={[0.34, 0.72]} />
+              <meshStandardMaterial
+                color={posIdx === 0 ? accentHex : '#334155'}
+                emissive={posIdx === 0 ? accentHex : '#475569'}
+                emissiveIntensity={posIdx === 0 ? 2.4 : 0.8}
+              />
+            </mesh>
+            {/* Pantalla LED del dorsal / tiempo */}
+            <mesh position={[0.18, 0, -0.48]}>
+              <planeGeometry args={[0.46, 0.72]} />
+              <meshStandardMaterial
+                color="#F8FAFC"
+                emissive={posIdx === 0 ? '#FEF08A' : '#E0F2FE'}
+                emissiveIntensity={1.5}
+              />
+            </mesh>
+          </group>
+        ))}
+      </group>
+    </group>
+  );
+}
+
+/**
  * Componente 3D del Circuito activo (Montmeló GP, Sierra Seca o Neo-Wangan) con:
  * - Asfalto PBR granulado con relieve, líneas blancas FIA y goma en trazada.
- * - Pianos 3D dentados y guardarrail metálico Armco de doble onda en todo el perímetro.
- * - Línea de meta ajedrezada, cajones de parrilla F1 y pórtico con semáforo de 5 luces.
+ * - Pianos 3D dentados, guardarrail metálico Armco, escapatorias de grava y muros de neumáticos.
+ * - Carteles oficiales FIA de referencia de frenada (150m, 100m, 50m) antes de cada curva fuerte.
+ * - Edificio de Boxes 3D con garajes iluminados, Torre de Clasificación y Pórtico con Semáforo F1.
  */
 export function Track() {
   const trackId = useTelemetryStore((s) => s.trackId);
@@ -597,6 +1128,9 @@ export function Track() {
     railGeo,
     kerbGeo,
     guardrailGeo,
+    gravelGeo,
+    tireStackPlacements,
+    brakingBoards,
     startPos,
     startAngleY,
   } = useMemo(
@@ -604,10 +1138,8 @@ export function Track() {
     [curve, trackId]
   );
 
-  const { asphaltMap, asphaltBumpMap, checkeredMap } = useMemo(
-    () => createProceduralTrackTextures(trackId),
-    [trackId]
-  );
+  const { asphaltMap, asphaltBumpMap, checkeredMap, gravelMap, boardMaps } =
+    useMemo(() => createProceduralTrackTextures(trackId), [trackId]);
 
   const isWangan = trackId === 'neo-wangan';
   const isSierra = trackId === 'sierra-seca';
@@ -620,6 +1152,17 @@ export function Track() {
         <meshStandardMaterial
           color={isWangan ? '#0F172A' : isSierra ? '#2A2118' : '#1E2530'}
           roughness={isRain ? 0.55 : 0.88}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+
+      {/* Escapatorias exteriores de grava (Gravel Traps) en curvas fuertes */}
+      <mesh geometry={gravelGeo} receiveShadow>
+        <meshStandardMaterial
+          map={gravelMap}
+          bumpMap={gravelMap}
+          bumpScale={0.05}
+          roughness={0.95}
           side={THREE.DoubleSide}
         />
       </mesh>
@@ -657,6 +1200,37 @@ export function Track() {
         />
       </mesh>
 
+      {/* Barreras 3D de neumáticos rojiblancos apilados en curvas críticas */}
+      <TireWallBarriers placements={tireStackPlacements} isWangan={isWangan} />
+
+      {/* Carteles FIA de referencia de frenada (150m / 100m / 50m) antes de las curvas fuertes */}
+      {brakingBoards.map((b, idx) => (
+        <group
+          key={`${b.distanceLabel}-${idx}`}
+          position={b.position}
+          rotation={[0, b.rotationY, 0]}
+        >
+          {/* Postes metálicos de soporte */}
+          <mesh position={[-0.36, 0.55, -0.04]} castShadow>
+            <boxGeometry args={[0.06, 1.1, 0.06]} />
+            <meshStandardMaterial color="#334155" metalness={0.7} roughness={0.3} />
+          </mesh>
+          <mesh position={[0.36, 0.55, -0.04]} castShadow>
+            <boxGeometry args={[0.06, 1.1, 0.06]} />
+            <meshStandardMaterial color="#334155" metalness={0.7} roughness={0.3} />
+          </mesh>
+          {/* Placa reflectante con distancia (150m, 100m, 50m) */}
+          <mesh position={[0, 0.72, 0]} castShadow>
+            <boxGeometry args={[1.05, 0.78, 0.05]} />
+            <meshStandardMaterial
+              map={boardMaps[b.distanceLabel]}
+              roughness={0.32}
+              metalness={0.08}
+            />
+          </mesh>
+        </group>
+      ))}
+
       {/* Trencillas conductoras metálicas de los 2 carriles */}
       <mesh geometry={braidGeo}>
         <meshStandardMaterial
@@ -676,8 +1250,13 @@ export function Track() {
         />
       </mesh>
 
-      {/* Pórtico, Parrilla F1 y Línea Ajedrezada de Salida / Meta */}
+      {/* Pórtico, Edificio de Boxes, Torre de Clasificación, Parrilla F1 y Línea de Meta */}
       <group position={startPos} rotation={[0, startAngleY, 0]}>
+        <F1PitBuildingAndTimingTower
+          isWangan={isWangan}
+          isSierra={isSierra}
+        />
+
         {/* Línea de Meta con textura de bandera a cuadros */}
         <mesh position={[0, 0.032, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <planeGeometry args={[ASPHALT_HALF_WIDTH * 2 - 0.5, 1.15]} />
@@ -691,12 +1270,10 @@ export function Track() {
         {/* Cajones de Parrilla F1 (P1 y P2) pintados en ambos carriles */}
         {LANE_OFFSETS.map((lx, idx) => (
           <group key={lx} position={[lx, 0.031, -2.4 - idx * 1.2]}>
-            {/* Línea frontal del cajón de salida */}
             <mesh position={[0, 0, 1.4]} rotation={[-Math.PI / 2, 0, 0]}>
               <planeGeometry args={[1.65, 0.14]} />
               <meshStandardMaterial color="#F8FAFC" roughness={0.4} />
             </mesh>
-            {/* Líneas laterales del cajón */}
             <mesh position={[-0.78, 0, 0.7]} rotation={[-Math.PI / 2, 0, 0]}>
               <planeGeometry args={[0.12, 1.4]} />
               <meshStandardMaterial color="#F8FAFC" roughness={0.4} />

@@ -990,6 +990,7 @@ export function PhysicsCar() {
     }
 
     vis.speedMs = sim.speedMs;
+    vis.gear = sim.gear;
     skidEmitterRef.current.carGroup = carGroup;
     skidEmitterRef.current.driftYawRad = vis.driftYawRad;
     skidEmitterRef.current.driftIntensity = vis.driftIntensity;

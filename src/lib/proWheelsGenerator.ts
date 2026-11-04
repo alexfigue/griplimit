@@ -617,7 +617,8 @@ export function buildProMotorsportWheel(
   carDesignId: string | undefined,
   xSign: 1 | -1,
   isGhost: boolean,
-  ghostMaterial: THREE.Material
+  ghostMaterial: THREE.Material,
+  customDiscMaterial?: THREE.MeshStandardMaterial
 ): AssembledProWheel {
   const rootGroup = new THREE.Group();
   const spinGroup = new THREE.Group();
@@ -687,9 +688,12 @@ export function buildProMotorsportWheel(
   rimMesh.receiveShadow = true;
   spinGroup.add(rimMesh);
 
-  // 4. Disco de freno cerámico/acero (gira solidario con la rueda)
+  // 4. Disco de freno cerámico/acero (gira solidario con la rueda y se pone al rojo vivo en frenadas fuertes)
   const discGeo = getProBrakeDiscGeometry(r, w, rimR);
-  const discMesh = new THREE.Mesh(discGeo, SHARED_DISC_MATERIAL);
+  const discMesh = new THREE.Mesh(
+    discGeo,
+    customDiscMaterial ?? SHARED_DISC_MATERIAL
+  );
   discMesh.rotation.y = sideOrientationY;
   spinGroup.add(discMesh);
 
