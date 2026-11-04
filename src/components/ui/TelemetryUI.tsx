@@ -132,12 +132,19 @@ export function TelemetryUI() {
   );
 
   const raceMode = useTelemetryStore((s) => s.raceMode);
+  const appScreen = useTelemetryStore((s) => s.appScreen);
+  const setAppScreen = useTelemetryStore((s) => s.setAppScreen);
   const totalCarsInRace = useTelemetryStore((s) => s.totalCarsInRace);
   const liveGridStandings = useTelemetryStore((s) => s.liveGridStandings);
   const cupStartPhase = useTelemetryStore((s) => s.cupStartPhase);
   const countdownLights = useTelemetryStore((s) => s.countdownLights);
   const cupTargetLaps = useTelemetryStore((s) => s.cupTargetLaps);
   const cupRewardGp = useTelemetryStore((s) => s.cupRewardGp);
+  const leaderFinishedTimerSec = useTelemetryStore(
+    (s) => s.leaderFinishedTimerSec
+  );
+  const playerDidNotFinish = useTelemetryStore((s) => s.playerDidNotFinish);
+  const bestLapByTrack = useTelemetryStore((s) => s.bestLapByTrack);
 
   const activeLicenseId = useTelemetryStore((s) => s.activeLicenseId);
   const licenseProgress = useTelemetryStore((s) => s.licenseProgress);
@@ -216,6 +223,10 @@ export function TelemetryUI() {
   const maxRpm = useGarageStore((s) => s.carStats.maxRpm);
   const driftCeilingRatio = useGarageStore((s) => s.carStats.DriftCeilingRatio);
   const activeTireId = useGarageStore((s) => s.loadout.tiresId);
+  const activeParts = useGarageStore((s) => s.activeParts);
+  const carStats = useGarageStore((s) => s.carStats);
+  const isGarageOpen = useGarageStore((s) => s.isGarageOpen);
+  const setGarageOpen = useGarageStore((s) => s.setGarageOpen);
 
   const boss = CUP_BOSS_BY_TRACK[trackId];
   const activeLicense =
@@ -294,95 +305,176 @@ export function TelemetryUI() {
 
   const cameraLabel =
     cameraMode === 'chase'
-      ? 'Cámara: GT Baja [C]'
+      ? 'GT Baja [C]'
       : cameraMode === 'cockpit'
-        ? 'Cámara: Capó [C]'
-        : 'Cámara: Cenital [C]';
+        ? 'Capó [C]'
+        : 'Cenital [C]';
 
-  return (
-    <div className="pointer-events-none fixed inset-0 z-20 flex flex-col justify-between p-3 sm:p-5 select-none">
-      {/* HEADER UNIFICADO: 5 Modos Single-Player + Selector Contextual (Circuitos / Licencias / Campeonato) + Crono | Controles + Garaje */}
-      <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-2">
-          <div className="pointer-events-auto flex flex-wrap items-center gap-3 rounded-md border border-slate-800 bg-[#151B24]/92 px-3.5 py-2 backdrop-blur-md">
-            {/* Selector principal de los 5 Modos de Juego */}
-            <div className="flex flex-col gap-1.5">
-              <div className="flex flex-wrap items-center gap-1 rounded-xs border border-slate-700/80 bg-[#0D1117] p-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    soundEngine.unlock();
-                    setRaceMode('time-trial');
-                  }}
-                  className={`rounded-xs px-2.5 py-1 font-display text-xs font-bold transition-colors ${
-                    raceMode === 'time-trial'
-                      ? 'bg-[#2F81F7] text-white'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  ⏱️ Contrarreloj
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    soundEngine.unlock();
-                    setRaceMode('vs-ai');
-                  }}
-                  className={`rounded-xs px-2.5 py-1 font-display text-xs font-bold transition-colors ${
-                    raceMode === 'vs-ai'
-                      ? 'bg-[#E63946] text-white'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  🏁 Duelo 1vs1
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    soundEngine.unlock();
-                    setRaceMode('grand-prix');
-                  }}
-                  className={`rounded-xs px-2.5 py-1 font-display text-xs font-bold transition-colors ${
-                    raceMode === 'grand-prix'
-                      ? 'bg-emerald-500 text-slate-950'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  🏎️ Gran Premio (4)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    soundEngine.unlock();
-                    setRaceMode('license-school');
-                  }}
-                  className={`rounded-xs px-2.5 py-1 font-display text-xs font-bold transition-colors ${
-                    raceMode === 'license-school'
-                      ? 'bg-purple-500 text-white'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  🎓 Licencias FIA
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    soundEngine.unlock();
-                    setRaceMode('championship');
-                  }}
-                  className={`rounded-xs px-2.5 py-1 font-display text-xs font-bold transition-colors ${
-                    raceMode === 'championship'
-                      ? 'bg-[#F59E0B] text-slate-950'
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                >
-                  🏆 Campeonato
-                </button>
+  const modeTitleLabel =
+    raceMode === 'time-trial'
+      ? '⏱️ Contrarreloj'
+      : raceMode === 'vs-ai'
+        ? '🏁 Duelo 1vs1'
+        : raceMode === 'grand-prix'
+          ? '🏎️ Gran Premio (4)'
+          : raceMode === 'license-school'
+            ? `🎓 Licencia ${activeLicense.code}`
+            : `🏆 Mundial R${championshipRoundIndex + 1}/${CHAMPIONSHIP_TRACK_ORDER.length}`;
+
+  // 1. MODO AISLADO DE GARAJE Y PINTURA 3D (Oculta todo el HUD de carrera para evitar clics accidentales)
+  if (isGarageOpen) {
+    return <GaragePanel />;
+  }
+
+  // 2. MENÚ PRINCIPAL / PADDOCK HUB 3D (Showroom 360° de fondo antes de salir a pista)
+  if (appScreen === 'main-menu') {
+    return (
+      <div className="pointer-events-none fixed inset-0 z-30 flex flex-col justify-between select-none">
+        {/* Barra Superior del Paddock Hub */}
+        <header className="pointer-events-auto flex flex-wrap items-center justify-between gap-3 border-b border-slate-800/90 bg-[#0D1117]/92 px-4 py-2.5 backdrop-blur-md">
+          <div className="flex items-center gap-3">
+            <span className="rounded-xs bg-[#E63946] px-2 py-0.5 font-display text-xs font-black tracking-wider text-white uppercase">
+              GRIP LIMIT
+            </span>
+            <div>
+              <span className="font-display text-sm font-bold text-[#F0F4F8]">
+                FIA Slot Motorsport Simulator 3D
+              </span>
+              <span className="ml-2 hidden font-mono text-[11px] text-slate-400 sm:inline">
+                Paddock Oficial & Showroom 360°
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+            <button
+              type="button"
+              onClick={toggleWeatherMode}
+              className={`rounded-xs border px-2.5 py-1 font-semibold transition-colors ${
+                weatherMode === 'rain'
+                  ? 'border-sky-400/80 bg-sky-500/20 text-sky-200'
+                  : 'border-slate-700 bg-[#151B24] text-slate-200 hover:border-slate-500'
+              }`}
+            >
+              {weatherMode === 'rain' ? '🌧️ Clima: Lluvia' : '☀️ Clima: Seco'}
+            </button>
+            <button
+              type="button"
+              onClick={toggleMagnetMode}
+              className={`rounded-xs border px-2.5 py-1 font-semibold transition-colors ${
+                magnetMode === 'wood-free'
+                  ? 'border-[#F59E0B]/80 bg-[#F59E0B]/20 text-amber-200'
+                  : 'border-emerald-500/70 bg-emerald-500/15 text-emerald-200'
+              }`}
+            >
+              {magnetMode === 'gt-magnet'
+                ? '🧲 Tracción: Imán GT'
+                : '🪵 Tracción: Sin Imán (Wood)'}
+            </button>
+            <button
+              type="button"
+              onClick={toggleEnvironmentStyle}
+              className="rounded-xs border border-slate-700 bg-[#151B24] px-2.5 py-1 text-slate-200 hover:border-slate-500"
+            >
+              {environmentStyle === 'realistic'
+                ? '🏟️ Entorno: Circuito Real'
+                : '🪵 Entorno: Maqueta Salón'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                soundEngine.unlock();
+                toggleSound();
+              }}
+              className="rounded-xs border border-slate-700 bg-[#151B24] px-2.5 py-1 text-slate-200 hover:border-slate-500"
+            >
+              🔊 Audio: {soundEnabled ? 'ON' : 'OFF'}
+            </button>
+          </div>
+        </header>
+
+        {/* Cuerpo Principal del Paddock Hub: Panel Izquierdo de Competición + Vista 3D Derecha */}
+        <div className="flex flex-1 flex-col justify-between gap-4 overflow-y-auto p-4 sm:flex-row sm:items-center sm:p-6">
+          <div className="pointer-events-auto flex w-full max-w-2xl flex-col gap-3.5 rounded-md border border-slate-700/90 bg-[#0D1117]/92 p-4 shadow-2xl backdrop-blur-xl sm:p-5">
+            {/* Paso 1: Selector de Modo de Juego */}
+            <div>
+              <span className="font-mono text-[10px] font-bold tracking-wider text-cyan-400 uppercase">
+                1. Selecciona Disciplina de Competición
+              </span>
+              <div className="mt-1.5 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                {(
+                  [
+                    {
+                      id: 'grand-prix',
+                      title: '🏎️ Gran Premio',
+                      sub: '4 Coches · 3 Vueltas',
+                      activeCls: 'border-emerald-400 bg-emerald-500/20 text-white',
+                    },
+                    {
+                      id: 'championship',
+                      title: '🏆 Mundial FIA',
+                      sub: '6 Rondas · Podio P1-P3',
+                      activeCls: 'border-[#F59E0B] bg-[#F59E0B]/20 text-white',
+                    },
+                    {
+                      id: 'vs-ai',
+                      title: '🏁 Duelo 1vs1',
+                      sub: 'Contra Jefe de Pista',
+                      activeCls: 'border-[#E63946] bg-[#E63946]/20 text-white',
+                    },
+                    {
+                      id: 'license-school',
+                      title: '🎓 Licencias FIA',
+                      sub: '7 Pruebas Oficiales',
+                      activeCls: 'border-purple-400 bg-purple-500/20 text-white',
+                    },
+                    {
+                      id: 'time-trial',
+                      title: '⏱️ Contrarreloj',
+                      sub: 'Récords + Fantasma',
+                      activeCls: 'border-[#2F81F7] bg-[#2F81F7]/20 text-white',
+                    },
+                  ] as const
+                ).map((m) => {
+                  const active = raceMode === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => {
+                        soundEngine.unlock();
+                        setRaceMode(m.id);
+                      }}
+                      className={`flex flex-col items-start rounded-xs border p-2.5 text-left transition-all ${
+                        active
+                          ? m.activeCls
+                          : 'border-slate-800 bg-[#151B24]/90 text-slate-300 hover:border-slate-600'
+                      }`}
+                    >
+                      <span className="font-display text-xs font-bold">
+                        {m.title}
+                      </span>
+                      <span className="mt-0.5 font-mono text-[10px] text-slate-400">
+                        {m.sub}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
+            </div>
 
-              {/* Sub-barra contextual según Modo de Juego */}
+            {/* Paso 2: Selector de Circuito / Prueba de Licencia / Calendario del Mundial */}
+            <div>
+              <span className="font-mono text-[10px] font-bold tracking-wider text-cyan-400 uppercase">
+                {raceMode === 'license-school'
+                  ? '2. Selecciona Examen de Licencia FIA (1 Vuelta Sin Salidas de Carril)'
+                  : raceMode === 'championship'
+                    ? `2. Calendario Oficial del Campeonato Mundial FIA (Ronda Actual: R${championshipRoundIndex + 1}/${CHAMPIONSHIP_TRACK_ORDER.length})`
+                    : '2. Selecciona Circuito Oficial 3D'}
+              </span>
+
               {raceMode === 'license-school' ? (
-                <div className="flex flex-wrap items-center gap-1">
+                <div className="mt-1.5 grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                   {LICENSE_CHALLENGES.map((lic) => {
                     const active = lic.id === activeLicense.id;
                     const rec = licenseProgress[lic.id];
@@ -394,48 +486,78 @@ export function TelemetryUI() {
                           soundEngine.unlock();
                           selectLicenseChallenge(lic.id);
                         }}
-                        title={`${lic.code}: ${lic.title} (${lic.subtitle})`}
-                        className={`rounded-xs px-2 py-0.5 font-mono text-[11px] font-bold transition-colors ${
+                        className={`flex items-center justify-between rounded-xs border px-3 py-2 text-left transition-colors ${
                           active
-                            ? 'bg-purple-400 text-slate-950'
-                            : 'bg-[#0D1117]/80 text-slate-300 hover:text-white'
+                            ? 'border-purple-400 bg-purple-500/20 text-white'
+                            : 'border-slate-800 bg-[#151B24]/85 text-slate-300 hover:border-slate-600'
                         }`}
                       >
-                        {lic.code} {getLicenseMedalEmoji(rec?.medal ?? 'none')}
+                        <div>
+                          <span className="font-mono text-xs font-bold text-purple-300">
+                            [{lic.code}]
+                          </span>{' '}
+                          <span className="font-display text-xs font-bold">
+                            {lic.title}
+                          </span>
+                          <span className="block font-mono text-[10px] text-slate-400">
+                            {CIRCUITS[lic.trackId].name} · Oro:{' '}
+                            {(lic.goldMs / 1000).toFixed(2)}s
+                          </span>
+                        </div>
+                        <span className="text-base">
+                          {getLicenseMedalEmoji(rec?.medal ?? 'none')}
+                        </span>
                       </button>
                     );
                   })}
-                  <span className="ml-1.5 font-mono text-[10px] text-purple-200">
-                    🥇 {(activeLicense.goldMs / 1000).toFixed(2)}s · 🥈{' '}
-                    {(activeLicense.silverMs / 1000).toFixed(2)}s · 🥉{' '}
-                    {(activeLicense.bronzeMs / 1000).toFixed(2)}s
-                  </span>
                 </div>
               ) : raceMode === 'championship' ? (
-                <div className="flex flex-wrap items-center gap-2 font-mono text-[11px]">
-                  {CHAMPIONSHIP_TRACK_ORDER.map((tId, idx) => {
-                    const isCurrent = idx === championshipRoundIndex;
-                    const isPast = idx < championshipRoundIndex;
-                    return (
-                      <span
-                        key={tId}
-                        className={`rounded-xs px-2 py-0.5 font-bold ${
-                          isCurrent
-                            ? 'bg-[#F59E0B] text-slate-950'
-                            : isPast
-                              ? 'bg-emerald-500/20 text-emerald-300'
-                              : 'bg-[#0D1117]/80 text-slate-400'
-                        }`}
-                      >
-                        R{idx + 1}: {CIRCUITS[tId].name}
-                      </span>
-                    );
-                  })}
+                <div className="mt-1.5 space-y-2">
+                  <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                    {CHAMPIONSHIP_TRACK_ORDER.map((tId, idx) => {
+                      const isCurrent = idx === championshipRoundIndex;
+                      const isPast = idx < championshipRoundIndex;
+                      return (
+                        <div
+                          key={tId}
+                          className={`rounded-xs border px-2.5 py-2 font-mono text-xs ${
+                            isCurrent
+                              ? 'border-[#F59E0B] bg-[#F59E0B]/20 text-white font-bold'
+                              : isPast
+                                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                                : 'border-slate-800 bg-[#151B24]/60 text-slate-400'
+                          }`}
+                        >
+                          <span className="block text-[10px] uppercase">
+                            Ronda {idx + 1}{' '}
+                            {isCurrent ? '· ACTUAL' : isPast ? '· ✓' : ''}
+                          </span>
+                          <span className="font-display text-xs font-bold">
+                            {CIRCUITS[tId].name}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center justify-between rounded-xs border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 font-mono text-[11px] text-amber-200">
+                    <span>
+                      ⚠️ Regla FIA: Debes terminar en el Podio (P1–P3) dentro de los 30s tras el líder para avanzar de ronda.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={restartChampionship}
+                      className="shrink-0 rounded-xs border border-amber-400/50 bg-[#0D1117] px-2 py-0.5 text-[10px] font-bold text-amber-300 hover:border-amber-300"
+                    >
+                      Reiniciar Mundial
+                    </button>
+                  </div>
                 </div>
               ) : (
-                <div className="flex flex-wrap items-center gap-1">
+                <div className="mt-1.5 grid grid-cols-2 gap-2 sm:grid-cols-3">
                   {(Object.keys(CIRCUITS) as TrackId[]).map((id) => {
                     const active = id === trackId;
+                    const recMs = bestLapByTrack[id];
+                    const circuitBoss = CUP_BOSS_BY_TRACK[id];
                     return (
                       <button
                         key={id}
@@ -444,13 +566,23 @@ export function TelemetryUI() {
                           soundEngine.unlock();
                           setTrackId(id);
                         }}
-                        className={`rounded-xs px-2 py-0.5 font-display text-[11px] font-bold transition-colors ${
+                        className={`flex flex-col items-start rounded-xs border p-2.5 text-left transition-all ${
                           active
-                            ? 'bg-slate-200 text-slate-950'
-                            : 'bg-[#0D1117]/80 text-slate-400 hover:text-slate-200'
+                            ? 'border-cyan-400 bg-cyan-500/15 text-white shadow-md'
+                            : 'border-slate-800 bg-[#151B24]/85 text-slate-300 hover:border-slate-600'
                         }`}
                       >
-                        {CIRCUITS[id].name}
+                        <span className="font-display text-xs font-bold">
+                          {CIRCUITS[id].name}
+                        </span>
+                        <span className="mt-0.5 font-mono text-[10px] text-slate-400">
+                          {raceMode === 'vs-ai'
+                            ? `Rival: ${circuitBoss.name.split(' · ')[0]}`
+                            : `Oro: ${(CIRCUITS[id].goldTargetMs / 1000).toFixed(1)}s`}
+                        </span>
+                        <span className="mt-1 font-mono text-[10px] font-semibold text-[#F59E0B]">
+                          Récord: {recMs ? formatLapTime(recMs) : '--:--.---'}
+                        </span>
                       </button>
                     );
                   })}
@@ -458,264 +590,331 @@ export function TelemetryUI() {
               )}
             </div>
 
-            <div className="hidden h-12 w-px bg-slate-800 sm:block" />
+            {/* Paso 3: Botones Principales de Acción (Garaje 3D y Salir a Pista) */}
+            <div className="mt-1 flex flex-col gap-2.5 border-t border-slate-800 pt-3 sm:flex-row sm:items-center sm:justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.unlock();
+                  setGarageOpen(true);
+                }}
+                className="flex items-center justify-center gap-2 rounded-md border border-[#2F81F7] bg-[#151B24] px-4 py-3 font-display text-xs font-bold text-[#F0F4F8] transition-colors hover:bg-[#2F81F7]/20"
+              >
+                🔧 GARAJE, REGLAJE & PINTURA 3D ({activeParts.body.name})
+              </button>
 
-            {/* Cronometraje oficial + Posición + Sectores F1 */}
-            <div>
-              <div className="flex gap-3.5 font-mono text-xs tabular-nums">
-                {isAiRaceMode && (
-                  <div>
-                    <span className="block text-[10px] text-slate-400">
-                      Posición
-                    </span>
-                    <span
-                      className={`text-sm font-bold ${
-                        playerRacePosition === 1
-                          ? 'text-emerald-400'
-                          : 'text-[#F59E0B]'
-                      }`}
-                    >
-                      P{playerRacePosition} / {totalCarsInRace}
-                    </span>
-                  </div>
-                )}
-                <div>
-                  <span className="block text-[10px] text-slate-400">
-                    Vuelta
-                  </span>
-                  <span className="text-sm font-semibold text-[#F0F4F8]">
-                    {raceMode === 'time-trial'
-                      ? lapCount
-                      : `${Math.min(lapCount, cupTargetLaps)}/${cupTargetLaps}`}
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-[10px] text-slate-400">
-                    Crono
-                  </span>
-                  <span className="text-sm font-semibold text-[#F0F4F8]">
-                    {formatLapTime(currentLapTimeMs)}
-                  </span>
-                </div>
-                {isAiRaceMode ? (
-                  <div>
-                    <span className="block text-[10px] text-slate-400">
-                      Gap Líder
-                    </span>
-                    <span
-                      className={`text-sm font-bold ${
-                        gapToRivalM >= 0 ? 'text-emerald-400' : 'text-[#E63946]'
-                      }`}
-                    >
-                      {gapDisplay}
-                    </span>
-                  </div>
-                ) : (
-                  lastLapTimeMs !== null && (
-                    <div>
-                      <span className="block text-[10px] text-slate-400">
-                        Última
-                      </span>
-                      <span className="text-sm font-semibold text-slate-300">
-                        {formatLapTime(lastLapTimeMs)}
-                      </span>
-                    </div>
-                  )
-                )}
-                <div>
-                  <span className="block text-[10px] text-slate-400">
-                    {raceMode === 'license-school' ? 'Oro FIA' : 'Récord'}
-                  </span>
-                  <span className="text-sm font-bold text-[#F59E0B]">
-                    {raceMode === 'license-school'
-                      ? formatLapTime(activeLicense.goldMs)
-                      : bestLapTimeMs !== null
-                        ? formatLapTime(bestLapTimeMs)
-                        : '--:--.---'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-1.5 flex items-center gap-1.5 font-mono text-[10px] tabular-nums">
-                {(['S1', 'S2', 'S3'] as const).map((label, idx) => {
-                  const split = currentSectors[idx];
-                  return (
-                    <span
-                      key={label}
-                      className={`rounded-xs border px-1.5 py-0.5 font-semibold transition-colors ${getSectorBadgeClasses(
-                        split.color
-                      )}`}
-                    >
-                      {label} {formatSectorSeconds(split.timeMs)}
-                    </span>
-                  );
-                })}
-              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  soundEngine.unlock();
+                  setAppScreen('racing');
+                }}
+                className="flex items-center justify-center gap-2 rounded-md bg-emerald-500 px-6 py-3 font-display text-sm font-black tracking-wide text-slate-950 shadow-[0_0_24px_rgba(16,185,129,0.4)] transition-all hover:bg-emerald-400"
+              >
+                🏁 SALIR A PISTA →
+              </button>
             </div>
           </div>
 
-          {/* Tabla en vivo de Parrilla (P1-P4) con Carril de cada coche para planificar Rebufo y Adelantamientos */}
-          {isAiRaceMode && liveGridStandings.length > 0 && (
-            <div className="pointer-events-auto flex flex-wrap items-center gap-1.5 rounded-md border border-slate-800 bg-[#0D1117]/90 px-3 py-1.5 font-mono text-[11px] tabular-nums backdrop-blur-md">
-              <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-                Parrilla:
+          {/* Tarjeta Derecha de Ficha Técnica del Coche en Showroom 360° */}
+          <div className="pointer-events-auto hidden w-80 flex-col gap-2 rounded-md border border-slate-800/90 bg-[#0D1117]/88 p-4 font-mono text-xs backdrop-blur-md lg:flex">
+            <span className="text-[10px] font-bold tracking-wider text-emerald-400 uppercase">
+              🎥 Vehículo Equipado en Showroom
+            </span>
+            <h3 className="font-display text-base font-extrabold text-white">
+              {activeParts.body.name}
+            </h3>
+            <div className="my-1 h-px bg-slate-800" />
+            <div className="flex justify-between">
+              <span className="text-slate-400">Velocidad Punta:</span>
+              <span className="font-bold text-white">{carStats.MaxSpeed} km/h</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Aceleración:</span>
+              <span className="font-bold text-white">
+                {carStats.Acceleration} m/s²
               </span>
-              {liveGridStandings.map((row) => (
-                <div
-                  key={row.driverId}
-                  className={`flex items-center gap-1.5 rounded-xs border px-2 py-0.5 ${
-                    row.isPlayer
-                      ? 'border-emerald-400/80 bg-emerald-500/20 text-emerald-100 font-bold'
-                      : 'border-slate-800 bg-[#151B24] text-slate-300'
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Peso Total:</span>
+              <span className="font-bold text-white">
+                {carStats.TotalWeight} kg
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Agarre Base:</span>
+              <span className="font-bold text-[#2F81F7]">
+                {Math.round(carStats.TotalGrip)} N
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Motor:</span>
+              <span className="text-slate-200">{activeParts.engine.name}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Compuesto:</span>
+              <span className="text-slate-200">{activeParts.tires.name}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 3. PANTALLA EN CARRERA (HUD Broadcast con una única Barra Superior limpia arriba del todo)
+  return (
+    <div className="pointer-events-none fixed inset-0 z-20 flex flex-col justify-between select-none">
+      {/* BARRA SUPERIOR BROADCAST ÚNICA (Arriba del todo, de extremo a extremo, sin dobles filas desalineadas) */}
+      <div className="flex flex-col items-center">
+        <header className="pointer-events-auto flex w-full flex-wrap items-center justify-between gap-2 border-b border-slate-800/90 bg-[#0D1117]/94 px-3 py-1.5 backdrop-blur-md">
+          {/* Izquierda: Botón Menú Principal + Modo/Circuito + Parrilla P1-P4 Compacta */}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                soundEngine.silenceAll();
+                setAppScreen('main-menu');
+              }}
+              className="rounded-xs border border-slate-700 bg-[#151B24] px-2.5 py-1 font-display text-xs font-bold text-slate-100 transition-colors hover:border-cyan-400 hover:text-cyan-300"
+            >
+              ☰ Menú
+            </button>
+
+            <div className="flex items-center gap-1.5 rounded-xs border border-slate-800 bg-[#151B24] px-2.5 py-1 font-display text-xs font-bold text-slate-200">
+              <span>{modeTitleLabel}</span>
+              <span className="text-slate-600">·</span>
+              <span className="text-cyan-300">{CIRCUITS[trackId].name}</span>
+            </div>
+
+            {isAiRaceMode && liveGridStandings.length > 0 && (
+              <div className="hidden items-center gap-1 font-mono text-[11px] tabular-nums xl:flex">
+                {liveGridStandings.map((row) => (
+                  <span
+                    key={row.driverId}
+                    className={`rounded-xs border px-1.5 py-0.5 ${
+                      row.isPlayer
+                        ? 'border-emerald-400/80 bg-emerald-500/20 text-emerald-100 font-bold'
+                        : 'border-slate-800 bg-[#151B24] text-slate-300'
+                    }`}
+                  >
+                    <strong className="text-amber-300">P{row.position}</strong>{' '}
+                    {row.name.split(' · ')[0]}{' '}
+                    <span className="text-[10px] text-slate-400">
+                      {row.position === 1
+                        ? 'LÍDER'
+                        : `-${row.gapToLeaderM.toFixed(0)}m`}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Centro: Cronometraje Oficial + Sectores S1/S2/S3 + Cuenta Atrás de 30s si el Líder cruzó meta */}
+          <div className="flex flex-wrap items-center gap-3 font-mono text-xs tabular-nums">
+            {leaderFinishedTimerSec !== null &&
+              cupStartPhase !== 'finished' && (
+                <span className="animate-pulse rounded-xs border border-[#E63946] bg-[#E63946]/30 px-2.5 py-1 font-mono text-xs font-black text-red-100 shadow-[0_0_14px_rgba(230,57,70,0.5)]">
+                  🏁 LÍDER EN META · TIEMPO LÍMITE:{' '}
+                  {leaderFinishedTimerSec.toFixed(1)}s
+                </span>
+              )}
+
+            {isAiRaceMode && (
+              <div className="flex items-baseline gap-1">
+                <span className="text-[10px] text-slate-400">POS</span>
+                <span
+                  className={`text-sm font-bold ${
+                    playerRacePosition <= 3
+                      ? 'text-emerald-400'
+                      : 'text-[#E63946]'
                   }`}
                 >
-                  <span className="text-amber-300 font-bold">
-                    P{row.position}
-                  </span>
-                  <span>{row.name.split(' · ')[0]}</span>
-                  <span className="rounded-xs bg-slate-800 px-1 text-[9px] text-slate-300">
-                    {row.lane === 'left' ? 'IZQ' : 'DER'}
-                  </span>
-                  <span className="text-[10px] text-slate-400">
-                    {row.position === 1
-                      ? 'LÍDER'
-                      : `-${row.gapToLeaderM.toFixed(1)}m`}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                  P{playerRacePosition}/{totalCarsInRace}
+                </span>
+              </div>
+            )}
 
-        {/* Bloque Derecho: Controles de Pista + Salida Semáforo + Garaje Pro */}
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <div className="pointer-events-auto flex flex-wrap items-center gap-1.5 rounded-md border border-slate-800 bg-[#151B24]/90 p-1.5 backdrop-blur-md">
+            <div className="flex items-baseline gap-1">
+              <span className="text-[10px] text-slate-400">VUELTA</span>
+              <span className="text-sm font-bold text-[#F0F4F8]">
+                {raceMode === 'time-trial'
+                  ? lapCount
+                  : `${Math.min(lapCount, cupTargetLaps)}/${cupTargetLaps}`}
+              </span>
+            </div>
+
+            <div className="flex items-baseline gap-1">
+              <span className="text-[10px] text-slate-400">CRONO</span>
+              <span className="text-sm font-bold text-[#F0F4F8]">
+                {formatLapTime(currentLapTimeMs)}
+              </span>
+            </div>
+
+            <div className="hidden items-center gap-1 sm:flex">
+              {(['S1', 'S2', 'S3'] as const).map((label, idx) => {
+                const split = currentSectors[idx];
+                return (
+                  <span
+                    key={label}
+                    className={`rounded-xs border px-1.5 py-0.5 text-[10px] font-semibold ${getSectorBadgeClasses(
+                      split.color
+                    )}`}
+                  >
+                    {label} {formatSectorSeconds(split.timeMs)}
+                  </span>
+                );
+              })}
+            </div>
+
+            <div className="hidden items-baseline gap-1 md:flex">
+              <span className="text-[10px] text-slate-400">
+                {raceMode === 'license-school' ? 'ORO' : 'RÉCORD'}
+              </span>
+              <span className="text-xs font-bold text-[#F59E0B]">
+                {raceMode === 'license-school'
+                  ? formatLapTime(activeLicense.goldMs)
+                  : bestLapTimeMs !== null
+                    ? formatLapTime(bestLapTimeMs)
+                    : '--:--.---'}
+              </span>
+            </div>
+          </div>
+
+          {/* Derecha: Fila única de Controles Rápidos + Botón Garaje */}
+          <div className="flex flex-wrap items-center gap-1 font-mono text-[11px]">
             <button
               type="button"
               onClick={() => {
                 soundEngine.unlock();
                 requestTrackReset();
               }}
-              title="Volver a la parrilla de salida y activar el Semáforo F1 (o reencarrilar si saliste de pista) [Tecla R]"
-              className="rounded-xs border border-amber-500/60 bg-amber-500/15 px-2.5 py-1.5 text-xs font-bold text-amber-200 transition-colors hover:bg-amber-500/25"
+              className="rounded-xs border border-amber-500/60 bg-amber-500/15 px-2 py-1 font-bold text-amber-200 hover:bg-amber-500/25"
             >
               {isDerailed && raceMode !== 'license-school'
                 ? 'Reencarrilar [R]'
-                : '🚦 Salida Semáforo [R]'}
+                : '🚦 Salida [R]'}
             </button>
-
             <button
               type="button"
               onClick={toggleCameraMode}
-              className="rounded-xs border border-slate-700/70 bg-[#0D1117]/70 px-2.5 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-[#2F81F7]"
+              className="rounded-xs border border-slate-700 bg-[#151B24] px-2 py-1 text-slate-200 hover:border-[#2F81F7]"
             >
-              {cameraLabel}
+              🎥 {cameraLabel}
             </button>
-
             <button
               type="button"
               onClick={toggleMagnetMode}
-              title="Alternar entre Imán Neodimio GT (pegado al raíl) y Modo Wood Sin Imán (derrapes largos y progresivos de costado) [Tecla I]"
-              className={`rounded-xs border px-2.5 py-1.5 text-xs font-bold transition-colors ${
+              className={`rounded-xs border px-2 py-1 font-bold ${
                 magnetMode === 'wood-free'
                   ? 'border-[#F59E0B]/80 bg-[#F59E0B]/20 text-amber-200'
-                  : 'border-emerald-400/70 bg-emerald-500/15 text-emerald-200 hover:border-emerald-300'
+                  : 'border-emerald-400/70 bg-emerald-500/15 text-emerald-200'
               }`}
             >
-              {magnetMode === 'gt-magnet'
-                ? '🧲 Imán GT [I]'
-                : '🪵 Sin Imán (Wood) [I]'}
+              {magnetMode === 'gt-magnet' ? '🧲 Imán [I]' : '🪵 Wood [I]'}
             </button>
-
             <button
               type="button"
               onClick={toggleWeatherMode}
-              title="Cambiar entre Asfalto Seco y Lluvia [Tecla V]"
-              className={`rounded-xs border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+              className={`rounded-xs border px-2 py-1 ${
                 weatherMode === 'rain'
                   ? 'border-sky-400/80 bg-sky-500/25 text-sky-100'
-                  : 'border-slate-700/70 bg-[#0D1117]/70 text-slate-200 hover:border-[#2F81F7]'
+                  : 'border-slate-700 bg-[#151B24] text-slate-200'
               }`}
             >
               {weatherMode === 'rain' ? '🌧️ Lluvia [V]' : '☀️ Seco [V]'}
             </button>
-
             <button
               type="button"
               onClick={toggleAssist}
-              className={`rounded-xs border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+              className={`hidden rounded-xs border px-2 py-1 lg:inline-block ${
                 assistEnabled
-                  ? 'border-[#2F81F7]/70 bg-[#2F81F7]/20 text-[#F0F4F8]'
-                  : 'border-slate-700/70 bg-[#0D1117]/70 text-slate-400 hover:text-slate-200'
+                  ? 'border-[#2F81F7]/70 bg-[#2F81F7]/20 text-white'
+                  : 'border-slate-700 bg-[#151B24] text-slate-400'
               }`}
             >
-              Trazada: {assistEnabled ? 'ON' : 'OFF'} [H]
+              Trazada [H]
             </button>
-
             <button
               type="button"
               onClick={toggleGhost}
-              className={`rounded-xs border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+              className={`hidden rounded-xs border px-2 py-1 lg:inline-block ${
                 ghostEnabled
                   ? 'border-cyan-400/70 bg-cyan-500/20 text-cyan-100'
-                  : 'border-slate-700/70 bg-[#0D1117]/70 text-slate-400 hover:text-slate-200'
+                  : 'border-slate-700 bg-[#151B24] text-slate-400'
               }`}
             >
-              Fantasma: {ghostEnabled ? 'ON' : 'OFF'} [G]
+              Fantasma [G]
             </button>
-
             <button
               type="button"
               onClick={togglePlayerLane}
-              className="rounded-xs border border-slate-700/70 bg-[#0D1117]/70 px-2.5 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-[#2F81F7]"
+              className="rounded-xs border border-slate-700 bg-[#151B24] px-2 py-1 text-slate-200"
             >
-              Carril: {playerLane === 'left' ? 'Izq' : 'Der'} [L]
+              Carril {playerLane === 'left' ? 'Izq' : 'Der'} [L]
             </button>
-
             <button
               type="button"
               onClick={() => {
                 soundEngine.unlock();
                 toggleSound();
               }}
-              className={`rounded-xs border px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                soundEnabled
-                  ? 'border-slate-700/70 bg-[#0D1117]/70 text-slate-200 hover:border-[#2F81F7]'
-                  : 'border-slate-800 bg-[#0D1117]/40 text-slate-500 hover:text-slate-300'
-              }`}
+              className="rounded-xs border border-slate-700 bg-[#151B24] px-2 py-1 text-slate-200"
             >
-              Audio: {soundEnabled ? 'ON' : 'OFF'} [M]
+              {soundEnabled ? '🔊 [M]' : '🔇 [M]'}
             </button>
-
             <button
               type="button"
               onClick={toggleTelemetryPanel}
-              title="Abrir Gráfico de Telemetría Post-Vuelta e Ingeniero de Pista [Tecla T]"
-              className={`rounded-xs border px-2.5 py-1.5 text-xs font-bold transition-colors ${
+              className={`rounded-xs border px-2 py-1 font-bold ${
                 telemetryPanelOpen
                   ? 'border-cyan-400 bg-cyan-500/25 text-cyan-100'
-                  : 'border-cyan-500/50 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20'
+                  : 'border-cyan-500/50 bg-cyan-500/10 text-cyan-200'
               }`}
             >
-              📊 Telemetría [T]
+              📊 [T]
             </button>
-
             <button
               type="button"
-              onClick={toggleEnvironmentStyle}
-              className={`rounded-xs border px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                environmentStyle === 'tabletop'
-                  ? 'border-[#F59E0B]/70 bg-[#F59E0B]/20 text-amber-100'
-                  : 'border-slate-700/70 bg-[#0D1117]/70 text-slate-200 hover:border-[#2F81F7]'
-              }`}
+              onClick={() => {
+                soundEngine.silenceAll();
+                setGarageOpen(true);
+              }}
+              className="rounded-xs border border-[#2F81F7] bg-[#2F81F7]/20 px-2.5 py-1 font-display font-bold text-white hover:bg-[#2F81F7]/35"
             >
-              {environmentStyle === 'realistic' ? 'Circuito [E]' : 'Salón [E]'}
+              🔧 Garaje
             </button>
           </div>
+        </header>
 
-          <GaragePanel />
-        </div>
-      </header>
+        {/* TOAST SUPERIOR DE VUELTA COMPLETADA (Debajo de la barra superior, NUNCA tapando el centro de la pantalla) */}
+        {showLapMedalBanner && lastLapSummary && (
+          <div
+            className={`mt-1.5 flex items-center gap-3 rounded-full border px-4 py-1 shadow-lg backdrop-blur-md ${
+              getMedalBannerClasses(lastLapSummary.medal).border
+            }`}
+          >
+            {lastLapSummary.isNewBest && (
+              <span className="rounded-full bg-cyan-500/30 px-2 py-0.5 font-mono text-[10px] font-bold text-cyan-200">
+                ★ NUEVO RÉCORD
+              </span>
+            )}
+            <span className="font-display text-xs font-bold text-white">
+              {lastLapSummary.title}
+            </span>
+            <span
+              className={`font-mono text-xs font-bold tabular-nums ${
+                getMedalBannerClasses(lastLapSummary.medal).accent
+              }`}
+            >
+              {formatLapTime(lastLapSummary.lapTimeMs)}
+            </span>
+            <span className="hidden font-mono text-[11px] text-slate-300 sm:inline">
+              · {lastLapSummary.subtitle}
+            </span>
+          </div>
+        )}
+      </div>
 
       {/* ZONA CENTRAL: SEMÁFORO OFICIAL F1 (5 Focos Rojos -> ¡VERDE SALIDA!), Modales de Final de Carrera / Licencias / Campeonato / Telemetría */}
       <div className="mx-auto flex flex-col items-center gap-2">
@@ -1098,45 +1297,67 @@ export function TelemetryUI() {
         {isAiRaceMode && cupStartPhase === 'finished' && (
           <div
             className={`pointer-events-auto w-full max-w-lg rounded-md border-2 px-6 py-4 text-center shadow-2xl backdrop-blur-md ${
-              playerRacePosition === 1
+              !playerDidNotFinish && playerRacePosition === 1
                 ? 'border-emerald-400 bg-[#151B24]/97'
-                : 'border-slate-600 bg-[#151B24]/97'
+                : playerDidNotFinish ||
+                    (raceMode === 'championship' && playerRacePosition > 3)
+                  ? 'border-[#E63946] bg-[#151B24]/97'
+                  : 'border-slate-600 bg-[#151B24]/97'
             }`}
           >
             <span
               className={`inline-block rounded-xs px-2.5 py-0.5 font-mono text-xs font-bold ${
-                playerRacePosition === 1
-                  ? 'bg-emerald-500 text-slate-950'
-                  : 'bg-amber-500 text-slate-950'
+                playerDidNotFinish
+                  ? 'bg-[#E63946] text-white'
+                  : playerRacePosition === 1
+                    ? 'bg-emerald-500 text-slate-950'
+                    : 'bg-amber-500 text-slate-950'
               }`}
             >
-              {raceMode === 'championship'
-                ? championshipCompleted
-                  ? '🏆 ¡FINAL DEL CAMPEONATO MUNDIAL FIA!'
-                  : `🏆 RONDA ${championshipRoundIndex + 1}/${CHAMPIONSHIP_TRACK_ORDER.length} COMPLETADA · P${playerRacePosition}`
-                : playerRacePosition === 1
-                  ? '🏆 ¡VICTORIA EN GRAN PREMIO!'
-                  : `🏁 ${playerRacePosition}.ª POSICIÓN FINAL (+${cupRewardGp} GP)`}
+              {playerDidNotFinish
+                ? '⏱️ DNF · TIEMPO LÍMITE AGOTADO (30s TRAS EL LÍDER)'
+                : raceMode === 'championship'
+                  ? championshipCompleted
+                    ? '🏆 ¡FINAL DEL CAMPEONATO MUNDIAL FIA!'
+                    : playerRacePosition <= 3
+                      ? `🏆 RONDA ${championshipRoundIndex + 1}/${CHAMPIONSHIP_TRACK_ORDER.length} CLASIFICADA · P${playerRacePosition}`
+                      : `❌ RONDA ${championshipRoundIndex + 1} NO SUPERADA · P${playerRacePosition} (FUERA DE PODIO)`
+                  : playerRacePosition === 1
+                    ? '🏆 ¡VICTORIA EN GRAN PREMIO!'
+                    : `🏁 ${playerRacePosition}.ª POSICIÓN FINAL (+${cupRewardGp} GP)`}
             </span>
 
             <p className="mt-2 font-display text-xl font-bold text-[#F0F4F8]">
-              {raceMode === 'championship' && championshipCompleted
-                ? championshipStandings[0]?.isPlayer
-                  ? '¡ERES EL CAMPEÓN DEL MUNDO FIA SLOT!'
-                  : `Campeón FIA: ${championshipStandings[0]?.name}`
-                : playerRacePosition === 1
-                  ? `¡Cruzaste la meta en P1 en ${CIRCUITS[trackId].name}!`
-                  : `Finalizaste P${playerRacePosition} de ${totalCarsInRace} coches en pista`}
+              {playerDidNotFinish
+                ? 'No cruzaste la línea de meta antes de que expiraran los 30s reglamentarios'
+                : raceMode === 'championship' && championshipCompleted
+                  ? championshipStandings[0]?.isPlayer
+                    ? '¡ERES EL CAMPEÓN DEL MUNDO FIA SLOT!'
+                    : `Campeón FIA: ${championshipStandings[0]?.name}`
+                  : playerRacePosition === 1
+                    ? `¡Cruzaste la meta en P1 en ${CIRCUITS[trackId].name}!`
+                    : `Finalizaste P${playerRacePosition} de ${totalCarsInRace} coches en pista`}
             </p>
+
+            {raceMode === 'championship' &&
+              (playerDidNotFinish || playerRacePosition > 3) && (
+                <p className="mt-1.5 rounded-xs border border-[#E63946]/60 bg-[#E63946]/15 px-3 py-1 font-mono text-xs text-red-200">
+                  Requisito FIA: Necesitas acabar en el Podio (P1, P2 o P3) dentro del tiempo límite para avanzar a la siguiente ronda.
+                </p>
+              )}
 
             {/* Tabla de Clasificación de la Carrera o General del Campeonato FIA */}
             <div className="mt-3 rounded-xs border border-slate-800 bg-[#0D1117]/90 p-2.5 text-left font-mono text-xs">
               <div className="mb-1.5 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-                {raceMode === 'championship'
+                {raceMode === 'championship' &&
+                !playerDidNotFinish &&
+                playerRacePosition <= 3
                   ? 'Clasificación General del Campeonato FIA (Puntos 25-18-15-12)'
                   : 'Clasificación Oficial en Meta'}
               </div>
-              {raceMode === 'championship'
+              {raceMode === 'championship' &&
+              !playerDidNotFinish &&
+              playerRacePosition <= 3
                 ? championshipStandings.map((row, idx) => (
                     <div
                       key={row.driverId}
@@ -1165,12 +1386,17 @@ export function TelemetryUI() {
                       }`}
                     >
                       <span>
-                        P{row.position} · {row.name}
+                        {row.isPlayer && playerDidNotFinish
+                          ? 'DNF'
+                          : `P${row.position}`}{' '}
+                        · {row.name}
                       </span>
                       <span>
-                        {row.position === 1
-                          ? 'GANADOR'
-                          : `+${row.gapToLeaderM.toFixed(1)} m`}
+                        {row.isPlayer && playerDidNotFinish
+                          ? 'TIEMPO AGOTADO'
+                          : row.position === 1
+                            ? 'GANADOR'
+                            : `+${row.gapToLeaderM.toFixed(1)} m`}
                       </span>
                     </div>
                   ))}
@@ -1178,56 +1404,69 @@ export function TelemetryUI() {
 
             <div className="mt-3 flex flex-wrap items-center justify-center gap-2.5">
               {raceMode === 'championship' ? (
-                !championshipCompleted ? (
-                  <button
-                    type="button"
-                    onClick={advanceChampionshipRound}
-                    className="rounded-xs bg-[#F59E0B] px-4 py-1.5 font-display text-xs font-bold text-slate-950 hover:bg-amber-400"
-                  >
-                    Siguiente Ronda (R{championshipRoundIndex + 2}/
-                    {CHAMPIONSHIP_TRACK_ORDER.length}:{' '}
-                    {
-                      CIRCUITS[
-                        CHAMPIONSHIP_TRACK_ORDER[
-                          Math.min(
-                            CHAMPIONSHIP_TRACK_ORDER.length - 1,
-                            championshipRoundIndex + 1
-                          )
-                        ]
-                      ].name
-                    }
-                    ) →
-                  </button>
+                !playerDidNotFinish && playerRacePosition <= 3 ? (
+                  !championshipCompleted ? (
+                    <button
+                      type="button"
+                      onClick={advanceChampionshipRound}
+                      className="rounded-xs bg-[#F59E0B] px-4 py-1.5 font-display text-xs font-bold text-slate-950 hover:bg-amber-400"
+                    >
+                      Siguiente Ronda (R{championshipRoundIndex + 2}/
+                      {CHAMPIONSHIP_TRACK_ORDER.length}:{' '}
+                      {
+                        CIRCUITS[
+                          CHAMPIONSHIP_TRACK_ORDER[
+                            Math.min(
+                              CHAMPIONSHIP_TRACK_ORDER.length - 1,
+                              championshipRoundIndex + 1
+                            )
+                          ]
+                        ].name
+                      }
+                      ) →
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={restartChampionship}
+                      className="rounded-xs bg-[#F59E0B] px-4 py-1.5 font-display text-xs font-bold text-slate-950 hover:bg-amber-400"
+                    >
+                      Iniciar Nuevo Campeonato FIA
+                    </button>
+                  )
                 ) : (
                   <button
                     type="button"
-                    onClick={restartChampionship}
-                    className="rounded-xs bg-[#F59E0B] px-4 py-1.5 font-display text-xs font-bold text-slate-950 hover:bg-amber-400"
+                    onClick={requestTrackReset}
+                    className="rounded-xs bg-amber-500 px-4 py-1.5 font-display text-xs font-bold text-slate-950 hover:bg-amber-400"
                   >
-                    Iniciar Nuevo Campeonato FIA
+                    Repetir Ronda [R]
                   </button>
                 )
               ) : (
                 <button
                   type="button"
-                  onClick={() => setRaceMode(raceMode)}
+                  onClick={requestTrackReset}
                   className="rounded-xs bg-emerald-500 px-3.5 py-1.5 font-display text-xs font-bold text-slate-950 hover:bg-emerald-400"
                 >
-                  Repetir Carrera
+                  Repetir Carrera [R]
                 </button>
               )}
               <button
                 type="button"
-                onClick={() => setRaceMode('time-trial')}
+                onClick={() => {
+                  soundEngine.silenceAll();
+                  setAppScreen('main-menu');
+                }}
                 className="rounded-xs border border-slate-700 bg-[#0D1117] px-3.5 py-1.5 font-display text-xs font-semibold text-slate-300 hover:border-slate-500"
               >
-                Ir a Contrarreloj
+                Volver al Menú Principal
               </button>
             </div>
           </div>
         )}
 
-        {isDerailed ? (
+        {isDerailed && (
           <div
             role="alert"
             className="pointer-events-auto max-w-md rounded-md border-2 border-[#E63946] bg-[#151B24]/95 px-5 py-4 text-center shadow-2xl backdrop-blur-md"
@@ -1244,33 +1483,7 @@ export function TelemetryUI() {
               blandos en el Garaje.
             </p>
           </div>
-        ) : showLapMedalBanner && lastLapSummary ? (
-          (() => {
-            const style = getMedalBannerClasses(lastLapSummary.medal);
-            return (
-              <div
-                className={`max-w-md rounded-md border-2 px-5 py-3 text-center shadow-2xl backdrop-blur-md ${style.border}`}
-              >
-                {lastLapSummary.isNewBest && (
-                  <span className="inline-block rounded-xs bg-cyan-500/25 px-2 py-0.5 font-mono text-[11px] font-bold text-cyan-200">
-                    NUEVO RÉCORD PERSONAL · FANTASMA ACTUALIZADO
-                  </span>
-                )}
-                <p className="mt-1 font-display text-lg font-bold tracking-wide text-[#F0F4F8]">
-                  {lastLapSummary.title}
-                </p>
-                <p
-                  className={`font-mono text-sm font-bold tabular-nums ${style.accent}`}
-                >
-                  {formatLapTime(lastLapSummary.lapTimeMs)}
-                </p>
-                <p className="mt-0.5 text-xs text-slate-300">
-                  {lastLapSummary.subtitle}
-                </p>
-              </div>
-            );
-          })()
-        ) : null}
+        )}
 
         {!isDerailed && assistEnabled && brakeAdvice === 'brake' ? (
           <div className="rounded-md border border-[#E63946] bg-[#E63946]/25 px-4 py-1.5 text-center backdrop-blur-sm">
@@ -1298,7 +1511,7 @@ export function TelemetryUI() {
       </div>
 
       {/* ZONA INFERIOR: Pedales táctiles + Cuadro Digital GT3/F1 (Shift Lights LED + Marcha + RPM + Fuerzas G) */}
-      <div className="flex flex-col-reverse items-stretch justify-between gap-4 sm:flex-row sm:items-end">
+      <div className="flex flex-col-reverse items-stretch justify-between gap-4 p-3 sm:flex-row sm:items-end sm:p-5">
         <div className="pointer-events-auto flex items-center gap-3">
           <button
             type="button"

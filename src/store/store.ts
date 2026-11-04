@@ -8,6 +8,7 @@ import {
   saveNewCommunityCar,
 } from '@/lib/customCarStorage';
 import type {
+  AppScreenMode,
   BodyShellPart,
   CameraMode,
   CarLoadout,
@@ -818,12 +819,15 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
     environmentStyle: 'realistic',
     weatherMode: 'dry',
     raceMode: 'grand-prix',
+    appScreen: 'main-menu',
     totalCarsInRace: 4,
     cupStartPhase: 'countdown',
     countdownLights: 1,
     cupTargetLaps: 3,
     cupWinner: null,
     cupRewardGp: 0,
+    leaderFinishedTimerSec: null,
+    playerDidNotFinish: false,
     activeLicenseId: LICENSE_CHALLENGES[0].id,
     licenseProgress: loadPersistedLicenseProgress(),
     lastLicenseResult: null,
@@ -1010,6 +1014,47 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
         ghostVersionNonce: state.ghostVersionNonce + 1,
       })),
 
+    setAppScreen: (screen: AppScreenMode) => {
+      useGarageStore.getState().setGarageOpen(false);
+      const state = get();
+      const { bestLaps } = ensureRecordsLoaded();
+
+      set({
+        appScreen: screen,
+        cupStartPhase: 'countdown',
+        countdownLights: 1,
+        cupWinner: null,
+        cupRewardGp: 0,
+        leaderFinishedTimerSec: null,
+        playerDidNotFinish: false,
+        lastLicenseResult: null,
+        resetNonce: state.resetNonce + 1,
+        lapCount: 1,
+        rivalLapCount: 1,
+        currentLapTimeMs: 0,
+        bestLapTimeMs: bestLaps[state.trackId],
+        currentSectors: EMPTY_SECTOR_SPLITS,
+        lastLapSummary: null,
+        isDerailed: false,
+        isDrifting: false,
+        driftAngleDeg: 0,
+        guideStressRatio: 0,
+        brakeAdvice: 'clear',
+        recommendedCornerSpeedKmh: null,
+        speedMs: 0,
+        speedKmh: 0,
+        gear: 0,
+        engineRpm: 1650,
+        lateralG: 0,
+        centrifugalForce: 0,
+        gripUsageRatio: 0,
+        slipstreamActive: false,
+        overVoltActive: false,
+        falseStartPenalty: false,
+        turboStartActive: false,
+      });
+    },
+
     setTrackId: (trackId: TrackId) => {
       const { bestLaps, bestSectors, bestSpeedTraces } = ensureRecordsLoaded();
 
@@ -1019,6 +1064,8 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
         countdownLights: 1,
         cupWinner: null,
         cupRewardGp: 0,
+        leaderFinishedTimerSec: null,
+        playerDidNotFinish: false,
         lastLicenseResult: null,
         resetNonce: state.resetNonce + 1,
         lapCount: 1,
@@ -1097,6 +1144,8 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
         countdownLights: 1,
         cupWinner: null,
         cupRewardGp: 0,
+        leaderFinishedTimerSec: null,
+        playerDidNotFinish: false,
         lastLicenseResult: null,
         resetNonce: state.resetNonce + 1,
         lapCount: 1,
@@ -1143,6 +1192,8 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
         cupStartPhase: 'countdown',
         countdownLights: 1,
         cupWinner: null,
+        leaderFinishedTimerSec: null,
+        playerDidNotFinish: false,
         lastLicenseResult: null,
         resetNonce: state.resetNonce + 1,
         lapCount: 1,
@@ -1240,17 +1291,34 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
       });
     },
 
-    finishGridRace: (finalStandings: readonly GridStandingRow[]) => {
+    notifyAiLeaderFinished: () => {
+      const state = get();
+      if (
+        state.cupStartPhase !== 'finished' &&
+        state.leaderFinishedTimerSec === null
+      ) {
+        set({ leaderFinishedTimerSec: 30 });
+      }
+    },
+
+    finishGridRace: (
+      finalStandings: readonly GridStandingRow[],
+      didNotFinish = false
+    ) => {
       const state = get();
       if (state.cupStartPhase === 'finished') return;
 
       const playerRow = finalStandings.find((r) => r.isPlayer);
-      const playerPos: 1 | 2 | 3 | 4 = playerRow?.position ?? 4;
-      const isPlayerWinner = playerPos === 1;
+      const playerPos: 1 | 2 | 3 | 4 = didNotFinish
+        ? 4
+        : (playerRow?.position ?? 4);
+      const isPlayerWinner = !didNotFinish && playerPos === 1;
+      const qualifiedOnPodium = !didNotFinish && playerPos <= 3;
 
       const basePrize = CUP_VICTORY_PRIZE_BY_TRACK[state.trackId];
-      const reward =
-        playerPos === 1
+      const reward = didNotFinish
+        ? 0
+        : playerPos === 1
           ? basePrize
           : playerPos === 2
             ? Math.round(basePrize * 0.65)
@@ -1258,9 +1326,26 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
               ? Math.round(basePrize * 0.45)
               : 140;
 
-      useGarageStore.getState().addGpCredits(reward);
+      if (reward > 0) {
+        useGarageStore.getState().addGpCredits(reward);
+      }
 
       if (state.raceMode === 'championship') {
+        // Solo se consolidan puntos de la ronda si el jugador logra Podio (P1-P3) dentro del tiempo límite
+        if (!qualifiedOnPodium) {
+          set({
+            cupStartPhase: 'finished',
+            cupWinner: 'rival',
+            cupRewardGp: 0,
+            leaderFinishedTimerSec: null,
+            playerDidNotFinish: didNotFinish,
+            playerRacePosition: playerPos,
+            liveGridStandings: finalStandings,
+            championshipCompleted: false,
+          });
+          return;
+        }
+
         const updatedChampionship = state.championshipStandings
           .map((row) => {
             const match = finalStandings.find(
@@ -1286,6 +1371,8 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
           cupStartPhase: 'finished',
           cupWinner: isPlayerWinner ? 'player' : 'rival',
           cupRewardGp: reward,
+          leaderFinishedTimerSec: null,
+          playerDidNotFinish: false,
           playerRacePosition: playerPos,
           liveGridStandings: finalStandings,
           championshipStandings: updatedChampionship,
@@ -1298,6 +1385,8 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
         cupStartPhase: 'finished',
         cupWinner: isPlayerWinner ? 'player' : 'rival',
         cupRewardGp: reward,
+        leaderFinishedTimerSec: null,
+        playerDidNotFinish: didNotFinish,
         playerRacePosition: playerPos,
         liveGridStandings: finalStandings,
       });
@@ -1305,6 +1394,9 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
 
     advanceChampionshipRound: () => {
       const state = get();
+      if (state.playerDidNotFinish || state.playerRacePosition > 3) {
+        return;
+      }
       const maxRoundIdx = CHAMPIONSHIP_TRACK_ORDER.length - 1;
       const nextRound = Math.min(maxRoundIdx, state.championshipRoundIndex + 1);
       const nextTrack = CHAMPIONSHIP_TRACK_ORDER[nextRound];
@@ -1322,6 +1414,8 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
         countdownLights: 1,
         cupWinner: null,
         cupRewardGp: 0,
+        leaderFinishedTimerSec: null,
+        playerDidNotFinish: false,
         resetNonce: state.resetNonce + 1,
         lapCount: 1,
         rivalLapCount: 1,
@@ -1359,6 +1453,8 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
         countdownLights: 1,
         cupWinner: null,
         cupRewardGp: 0,
+        leaderFinishedTimerSec: null,
+        playerDidNotFinish: false,
         resetNonce: state.resetNonce + 1,
         lapCount: 1,
         rivalLapCount: 1,
@@ -1411,6 +1507,7 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
         cupStartPhase: 'finished',
         cupWinner: winner,
         cupRewardGp: reward,
+        leaderFinishedTimerSec: null,
       });
     },
 
@@ -1490,6 +1587,8 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
           cupStartPhase: 'countdown',
           countdownLights: 1,
           cupWinner: null,
+          leaderFinishedTimerSec: null,
+          playerDidNotFinish: false,
           lastLicenseResult: null,
           resetNonce: state.resetNonce + 1,
           lapCount: 1,

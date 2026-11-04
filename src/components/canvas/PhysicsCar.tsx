@@ -285,7 +285,72 @@ export function PhysicsCar() {
     const sim = physicsRef.current;
     const vis = visualMotionRef.current;
     const telemetryState = useTelemetryStore.getState();
+    const isGarageOpen = useGarageStore.getState().isGarageOpen;
+    const isShowroomIdle =
+      telemetryState.appScreen === 'main-menu' || isGarageOpen;
     const { throttle: rawThrottle, brake } = controlsRef.current;
+
+    // 0. MODO PADDOCK HUB / SHOWROOM 360° (Menú Principal o Garaje Abierto)
+    if (isShowroomIdle) {
+      sim.speedMs = 0;
+      sim.smoothedThrottle = 0;
+      sim.engineRpm = 1650;
+      sim.countdownStepTimerSec = 0;
+      vis.speedMs = 0;
+      vis.driftIntensity = 0;
+      vis.driftYawRad = 0;
+      vis.bodyRollRad = 0;
+      vis.bodyPitchRad = 0;
+      vis.brakeIntensity = 0;
+
+      sim.lateralOffsetM = THREE.MathUtils.lerp(
+        sim.lateralOffsetM,
+        targetLaneOffsetM,
+        1 - Math.exp(-12 * dt)
+      );
+      const u = (sim.distanceM / trackLengthM) % 1;
+      evaluateSplineKinematics(curve, u, _kinematics);
+      _laneWorldPos
+        .copy(_kinematics.position)
+        .addScaledVector(_kinematics.right, sim.lateralOffsetM);
+      carGroup.position.copy(_laneWorldPos);
+      _lookTarget.copy(_laneWorldPos).add(_kinematics.tangent);
+      carGroup.up.copy(_worldUp);
+      carGroup.lookAt(_lookTarget);
+      carGroup.updateMatrixWorld();
+
+      soundEngine.silenceAll();
+
+      const perspCam = state.camera as THREE.PerspectiveCamera;
+      const orbitAngle = state.clock.elapsedTime * 0.48;
+      const orbitRadius = isGarageOpen ? 5.2 : 6.2;
+      _desiredCamPos.set(
+        carGroup.position.x + Math.cos(orbitAngle) * orbitRadius,
+        carGroup.position.y + (isGarageOpen ? 1.75 : 2.1),
+        carGroup.position.z + Math.sin(orbitAngle) * orbitRadius
+      );
+      _desiredCamLook.set(
+        carGroup.position.x,
+        carGroup.position.y + 0.52,
+        carGroup.position.z
+      );
+
+      state.camera.position.lerp(_desiredCamPos, 1 - Math.exp(-6.5 * dt));
+      state.camera.lookAt(_desiredCamLook);
+
+      if (
+        perspCam.isPerspectiveCamera &&
+        Math.abs(perspCam.fov - 42) > 0.05
+      ) {
+        perspCam.fov = THREE.MathUtils.lerp(
+          perspCam.fov,
+          42,
+          1 - Math.exp(-6 * dt)
+        );
+        perspCam.updateProjectionMatrix();
+      }
+      return;
+    }
 
     const isRain = telemetryState.weatherMode === 'rain';
     const wetTireFactor = isRain
@@ -295,6 +360,22 @@ export function PhysicsCar() {
       : 1.0;
 
     let forceImmediateHudSync = false;
+
+    // 0.5. CUENTA ATRÁS DE 30 SEGUNDOS SI EL LÍDER IA HA CRUZADO LA META FINAL
+    if (
+      telemetryState.leaderFinishedTimerSec !== null &&
+      telemetryState.cupStartPhase !== 'finished'
+    ) {
+      const nextTimer = telemetryState.leaderFinishedTimerSec - dt;
+      if (nextTimer <= 0) {
+        const finalStandings = buildLiveGridStandings();
+        telemetryState.finishGridRace(finalStandings, true);
+        soundEngine.silenceAll();
+        forceImmediateHudSync = true;
+      } else {
+        useTelemetryStore.setState({ leaderFinishedTimerSec: nextTimer });
+      }
+    }
 
     // 1. SECUENCIA DEL SEMÁFORO F1 (5 Focos Rojos -> Luz Verde ¡SALIDA!)
     if (telemetryState.cupStartPhase === 'countdown') {
@@ -363,12 +444,15 @@ export function PhysicsCar() {
     }
 
     const isWaitingAtGrid = telemetryState.cupStartPhase === 'countdown';
-    const isOverVoltActive = sim.overVoltTimerSec > 0;
-    const isTurboStartActive = sim.turboStartTimerSec > 0;
+    const isRaceFinished = telemetryState.cupStartPhase === 'finished';
+    const isOverVoltActive = sim.overVoltTimerSec > 0 && !isRaceFinished;
+    const isTurboStartActive = sim.turboStartTimerSec > 0 && !isRaceFinished;
 
     vis.overVoltActive = isOverVoltActive || isTurboStartActive;
 
-    const effectiveRawThrottle = isWaitingAtGrid ? 0 : rawThrottle;
+    const effectiveRawThrottle =
+      isWaitingAtGrid || isRaceFinished ? 0 : rawThrottle;
+    const effectiveBrake = isRaceFinished ? 1.0 : brake;
 
     sim.lateralOffsetM = THREE.MathUtils.lerp(
       sim.lateralOffsetM,
@@ -387,7 +471,7 @@ export function PhysicsCar() {
       sim.smoothedThrottle = 0;
     }
 
-    vis.brakeIntensity = brake;
+    vis.brakeIntensity = effectiveBrake;
 
     // 2. Cálculo de Rebufo Aerodinámico (+8% punta) y Colisión Física de Carril contra la Parrilla IA
     const playerTotalDist =
@@ -554,7 +638,7 @@ export function PhysicsCar() {
         powerBandFactor *
         rearTractionEfficiency;
 
-      const brakeDecel = brake * SLOT_BRAKE_DECEL_MS2;
+      const brakeDecel = effectiveBrake * SLOT_BRAKE_DECEL_MS2;
       const effectiveDragCoeff = isSlipstreaming
         ? AERO_DRAG_COEFF * 0.65
         : AERO_DRAG_COEFF;
@@ -1144,49 +1228,30 @@ export function PhysicsCar() {
     skidEmitterRef.current.driftIntensity = vis.driftIntensity;
     skidEmitterRef.current.isDerailed = sim.isDerailed;
 
-    const isGarageOpen = useGarageStore.getState().isGarageOpen;
-    soundEngine.updateContinuousFrame({
-      speedMs: sim.speedMs,
-      maxSpeedMs,
-      engineRpm: sim.engineRpm,
-      maxRpm: carStats.maxRpm,
-      throttle: isWaitingAtGrid ? rawThrottle : sim.smoothedThrottle,
-      driftIntensity: vis.driftIntensity,
-      isDerailed: sim.isDerailed,
-      soundEnabled: telemetryState.soundEnabled,
-    });
+    if (isRaceFinished && sim.speedMs < 0.25) {
+      sim.speedMs = 0;
+      sim.engineRpm = 1650;
+      soundEngine.silenceAll();
+    } else {
+      soundEngine.updateContinuousFrame({
+        speedMs: sim.speedMs,
+        maxSpeedMs,
+        engineRpm: sim.engineRpm,
+        maxRpm: carStats.maxRpm,
+        throttle: isWaitingAtGrid
+          ? rawThrottle
+          : isRaceFinished
+            ? 0
+            : sim.smoothedThrottle,
+        driftIntensity: vis.driftIntensity,
+        isDerailed: sim.isDerailed,
+        soundEnabled: telemetryState.soundEnabled,
+      });
+    }
 
-    // 4. CÁMARAS DE SIMULADOR: Showroom 360°, Persecución Baja GT3, Cockpit/Capó y Cenital
+    // 4. CÁMARAS DE SIMULADOR: Persecución Baja GT3, Cockpit/Capó y Cenital
     const perspCam = state.camera as THREE.PerspectiveCamera;
-    if (isGarageOpen) {
-      const orbitAngle = state.clock.elapsedTime * 0.55;
-      const orbitRadius = 5.4;
-      _desiredCamPos.set(
-        carGroup.position.x + Math.cos(orbitAngle) * orbitRadius,
-        carGroup.position.y + 1.85,
-        carGroup.position.z + Math.sin(orbitAngle) * orbitRadius
-      );
-      _desiredCamLook.set(
-        carGroup.position.x,
-        carGroup.position.y + 0.52,
-        carGroup.position.z
-      );
-
-      state.camera.position.lerp(_desiredCamPos, 1 - Math.exp(-6.5 * dt));
-      state.camera.lookAt(_desiredCamLook);
-
-      if (
-        perspCam.isPerspectiveCamera &&
-        Math.abs(perspCam.fov - 42) > 0.05
-      ) {
-        perspCam.fov = THREE.MathUtils.lerp(
-          perspCam.fov,
-          42,
-          1 - Math.exp(-6 * dt)
-        );
-        perspCam.updateProjectionMatrix();
-      }
-    } else if (telemetryState.cameraMode === 'cockpit') {
+    if (telemetryState.cameraMode === 'cockpit') {
       const u = sim.distanceM / trackLengthM;
       evaluateSplineKinematics(curve, u, _kinematics);
 

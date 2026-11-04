@@ -117,34 +117,6 @@ function getSoftCloudTexture(): THREE.CanvasTexture | null {
   return cachedSoftCloudTex;
 }
 
-let cachedHeadlightPoolTex: THREE.CanvasTexture | null = null;
-function getHeadlightPoolTexture(): THREE.CanvasTexture | null {
-  if (typeof document === 'undefined') return null;
-  if (cachedHeadlightPoolTex) return cachedHeadlightPoolTex;
-
-  const w = 256;
-  const h = 256;
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    ctx.clearRect(0, 0, w, h);
-    // Dos conos convergentes suaves proyectados hacia delante (+Y del canvas)
-    for (const cx of [w * 0.34, w * 0.66]) {
-      const grad = ctx.createRadialGradient(cx, h * 0.82, 4, cx, h * 0.38, w * 0.44);
-      grad.addColorStop(0, 'rgba(224, 242, 254, 0.85)');
-      grad.addColorStop(0.38, 'rgba(186, 230, 253, 0.34)');
-      grad.addColorStop(1, 'rgba(56, 189, 248, 0)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, w, h);
-    }
-  }
-  cachedHeadlightPoolTex = new THREE.CanvasTexture(canvas);
-  cachedHeadlightPoolTex.needsUpdate = true;
-  return cachedHeadlightPoolTex;
-}
-
 function hasWheelAncestor(obj: THREE.Object3D, root: THREE.Object3D): boolean {
   let curr = obj.parent;
   while (curr && curr !== root) {
@@ -169,17 +141,18 @@ function LoadedCarGLB({
     const cloned = scene.clone(true);
     const wheelNodes: THREE.Object3D[] = [];
     const brakeMaterials: THREE.MeshStandardMaterial[] = [];
-    const exhaustFlames: THREE.Group[] = [];
-    const headlightBeams: THREE.Mesh[] = [];
 
-    // Eliminar mallas de bajo detalle (lod1+) en modelos Pro multi-LOD para dejar solo lod0 (100k+ vértices)
-    const lodNodesToRemove: THREE.Object3D[] = [];
+    // Eliminar mallas de bajo detalle (lod1+) y planos billboard de brillo (tailglow) en modelos Pro
+    const nodesToRemove: THREE.Object3D[] = [];
     cloned.traverse((child) => {
-      if (/^lod[1-9]/i.test(child.name)) {
-        lodNodesToRemove.push(child);
+      if (
+        /^lod[1-9]/i.test(child.name) ||
+        /tailglow|headglow|glow/i.test(child.name)
+      ) {
+        nodesToRemove.push(child);
       }
     });
-    for (const n of lodNodesToRemove) {
+    for (const n of nodesToRemove) {
       n.parent?.remove(n);
     }
 
@@ -216,14 +189,8 @@ function LoadedCarGLB({
       metalness: 0.94,
       roughness: 0.1,
     });
-    const headlightMaterial = new THREE.MeshStandardMaterial({
-      color: '#FFFFFF',
-      emissive: '#E0F2FE',
-      emissiveIntensity: 2.6,
-      roughness: 0.1,
-    });
 
-    // Material térmico para los 4 discos de freno (se vuelve incandescente al frenar fuerte)
+    // Material térmico para los 4 discos de freno (se vuelve incandescente dentro de la llanta al frenar fuerte)
     const discThermalMaterial = new THREE.MeshStandardMaterial({
       color: 0x94a3b8,
       roughness: 0.28,
@@ -242,6 +209,15 @@ function LoadedCarGLB({
       }
 
       if (child instanceof THREE.Mesh) {
+        const matName = (
+          (child.material as THREE.Material)?.name ?? ''
+        ).toLowerCase();
+
+        if (matName.includes('tailglow') || matName.includes('glow')) {
+          child.visible = false;
+          return;
+        }
+
         if (isGhost) {
           child.material = GHOST_HOLOGRAM_MATERIAL;
           child.castShadow = false;
@@ -249,10 +225,6 @@ function LoadedCarGLB({
         } else {
           child.castShadow = true;
           child.receiveShadow = true;
-
-          const matName = (
-            (child.material as THREE.Material)?.name ?? ''
-          ).toLowerCase();
 
           if (matName.includes('paint')) {
             child.material = paintMaterial;
@@ -271,17 +243,17 @@ function LoadedCarGLB({
             child.material = carbonMaterial;
           } else if (
             matName.includes('chrome') ||
-            matName.includes('exhaust')
+            matName.includes('exhaust') ||
+            matName.includes('head') ||
+            matName.includes('drl')
           ) {
             child.material = chromeMaterial;
-          } else if (matName.includes('head') || matName.includes('drl')) {
-            child.material = headlightMaterial;
-          } else if (matName.includes('tail')) {
+          } else if (matName === 'tail') {
             const tailMat = new THREE.MeshStandardMaterial({
-              color: '#FF1E38',
+              color: '#881320',
               emissive: '#FF1E38',
-              emissiveIntensity: 0.65,
-              roughness: 0.18,
+              emissiveIntensity: 0.25,
+              roughness: 0.22,
             });
             child.material = tailMat;
             brakeMaterials.push(tailMat);
@@ -292,7 +264,7 @@ function LoadedCarGLB({
 
     const extras = (scene.userData ?? {}) as ProCarExtras;
 
-    // 1. Ensamblar las 4 ruedas 3D Pro con discos de freno térmicos
+    // Ensamblar las 4 ruedas 3D Pro con discos de freno térmicos
     if (extras.wheels?.front && extras.wheels?.rear && wheelNodes.length === 0) {
       const { front, rear } = extras.wheels;
       const placements: Array<{ spec: ProWheelSpec; xSign: 1 | -1 }> = [
@@ -329,84 +301,6 @@ function LoadedCarGLB({
       }
     }
 
-    if (!isGhost) {
-      // 2. Llamaradas de escape 3D (Backfire Anti-Lag) en las bocas de escape reales de cada coche
-      const exhaustCoords: Array<[number, number, number]> =
-        extras.exhausts && extras.exhausts.length > 0
-          ? extras.exhausts
-          : [
-              [-0.32, 0.34, -2.25],
-              [0.32, 0.34, -2.25],
-            ];
-
-      const outerFlameGeo = new THREE.ConeGeometry(0.068, 0.52, 10, 1, true);
-      outerFlameGeo.rotateX(-Math.PI / 2);
-      outerFlameGeo.translate(0, 0, -0.26);
-
-      const innerCoreGeo = new THREE.ConeGeometry(0.036, 0.32, 8, 1, true);
-      innerCoreGeo.rotateX(-Math.PI / 2);
-      innerCoreGeo.translate(0, 0, -0.15);
-
-      const outerFlameMat = new THREE.MeshBasicMaterial({
-        color: '#FF5E00',
-        transparent: true,
-        opacity: 0.88,
-        blending: THREE.AdditiveBlending,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      });
-
-      const innerCoreMat = new THREE.MeshBasicMaterial({
-        color: '#60A5FA',
-        transparent: true,
-        opacity: 0.95,
-        blending: THREE.AdditiveBlending,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      });
-
-      for (const [ex, ey, ez] of exhaustCoords) {
-        const flameGroup = new THREE.Group();
-        flameGroup.position.set(ex, ey, ez);
-        flameGroup.visible = false;
-        flameGroup.add(new THREE.Mesh(outerFlameGeo, outerFlameMat));
-        flameGroup.add(new THREE.Mesh(innerCoreGeo, innerCoreMat));
-        cloned.add(flameGroup);
-        exhaustFlames.push(flameGroup);
-      }
-
-      // 3. Conos volumétricos de faros delanteros (Headlight Beams)
-      const headCoords: Array<[number, number, number]> =
-        extras.headLights && extras.headLights.length > 0
-          ? extras.headLights
-          : [
-              [-0.62, 0.48, 2.15],
-              [0.62, 0.48, 2.15],
-            ];
-
-      const beamGeo = new THREE.ConeGeometry(0.42, 3.6, 16, 1, true);
-      // En ConeGeometry el vértice está en +Y y la base en -Y; rotamos para que el vértice quede en el faro (0,0,0) y el haz se abra hacia +Z
-      beamGeo.rotateX(-Math.PI / 2);
-      beamGeo.translate(0, 0, 1.8);
-
-      const beamMat = new THREE.MeshBasicMaterial({
-        color: '#E0F2FE',
-        transparent: true,
-        opacity: 0.14,
-        blending: THREE.AdditiveBlending,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-      });
-
-      for (const [hx, hy, hz] of headCoords) {
-        const beamMesh = new THREE.Mesh(beamGeo, beamMat);
-        beamMesh.position.set(hx, hy, hz);
-        beamMesh.rotation.x = 0.09; // Inclinado ligeramente hacia el asfalto
-        cloned.add(beamMesh);
-        headlightBeams.push(beamMesh);
-      }
-    }
-
     const orientedGroup = new THREE.Group();
     cloned.rotation.y = yawOffsetRad;
     orientedGroup.add(cloned);
@@ -438,8 +332,6 @@ function LoadedCarGLB({
     wrapper.userData.wheels = wheelNodes;
     wrapper.userData.brakeMaterials = brakeMaterials;
     wrapper.userData.discThermalMaterial = discThermalMaterial;
-    wrapper.userData.exhaustFlames = exhaustFlames;
-    wrapper.userData.headlightBeams = headlightBeams;
     wrapper.userData.spinDirection = Math.cos(yawOffsetRad) >= 0 ? 1 : -1;
     return wrapper;
   }, [
@@ -508,9 +400,7 @@ class CarGLBErrorBoundary extends Component<
 /**
  * Componente 3D del vehículo con:
  * - Renderizado PBR Clearcoat (100k+ vértices) + llantas 3D forjadas a medida.
- * - Discos de freno térmicos que se ponen al rojo vivo en frenadas fuertes y se enfrían con el flujo de aire.
- * - Llamaradas de escape 3D (Backfire Anti-Lag) al reducir marcha o cortar inyección.
- * - Faros delanteros volumétricos con proyección de luz sobre el asfalto.
+ * - Discos de freno térmicos que se ponen al rojo vivo dentro de la llanta en frenadas fuertes.
  * - Humo volumétrico 3D de neumáticos en derrape y estela de agua pulverizada (Spray) en modo Lluvia.
  */
 export function CarModel({
@@ -525,18 +415,10 @@ export function CarModel({
   const guidePivotRef = useRef<THREE.Group>(null);
   const chassisRollRef = useRef<THREE.Group>(null);
   const guidePinMeshRef = useRef<THREE.Mesh>(null);
-  const leftSkidGlowRef = useRef<THREE.Mesh>(null);
-  const rightSkidGlowRef = useRef<THREE.Mesh>(null);
-  const leftBrakeLightRef = useRef<THREE.Mesh>(null);
-  const rightBrakeLightRef = useRef<THREE.Mesh>(null);
-  const headlightPoolMeshRef = useRef<THREE.Mesh>(null);
   const sparksPointsRef = useRef<THREE.Points>(null);
   const smokePointsRef = useRef<THREE.Points>(null);
 
   const brakeHeatRef = useRef(0);
-  const backfireTimerRef = useRef(0);
-  const prevGearRef = useRef(1);
-  const prevBrakeActiveRef = useRef(false);
 
   const sparkPool = useMemo(() => {
     const positions = new Float32Array(SPARK_POOL_SIZE * 3);
@@ -573,7 +455,6 @@ export function CarModel({
   }, []);
 
   const softCloudTex = useMemo(() => getSoftCloudTexture(), []);
-  const headlightPoolTex = useMemo(() => getHeadlightPoolTexture(), []);
 
   useFrame((_, rawDelta) => {
     if (!motionRef?.current) return;
@@ -584,7 +465,6 @@ export function CarModel({
       driftYawRad,
       driftIntensity,
       speedMs = 0,
-      gear = 1,
       brakeIntensity = 0,
       guideStress = 0,
       overVoltActive = false,
@@ -593,7 +473,6 @@ export function CarModel({
 
     const telemetryState = useTelemetryStore.getState();
     const isRain = telemetryState.weatherMode === 'rain';
-    const isNight = telemetryState.trackId === 'neo-wangan';
 
     if (guidePivotRef.current) {
       guidePivotRef.current.rotation.y = driftYawRad;
@@ -609,22 +488,6 @@ export function CarModel({
     } else {
       const coolRate = 0.52 + (speedMs / 38) * 0.95;
       brakeHeatRef.current = Math.max(0, brakeHeatRef.current - coolRate * dt);
-    }
-
-    // 2. Detección de reducción de marcha (Downshift) o clavada de frenos a alta velocidad -> Llamaradas de escape
-    const justStartedHardBraking =
-      brakeIntensity > 0.55 && !prevBrakeActiveRef.current && speedMs > 18;
-    const justDownshifted =
-      gear > 0 && prevGearRef.current > gear && speedMs > 10;
-
-    if (!derailed && (justDownshifted || justStartedHardBraking || overVoltActive)) {
-      backfireTimerRef.current = overVoltActive ? 0.08 : 0.18;
-    }
-    prevGearRef.current = gear;
-    prevBrakeActiveRef.current = brakeIntensity > 0.55;
-
-    if (backfireTimerRef.current > 0) {
-      backfireTimerRef.current = Math.max(0, backfireTimerRef.current - dt);
     }
 
     if (chassisRollRef.current) {
@@ -649,18 +512,18 @@ export function CarModel({
           }
         }
 
-        // Iluminación de las ópticas traseras 3D esculpidas en el modelo .glb
+        // Iluminación sutil únicamente de las ópticas traseras reales esculpidas en la malla 3D
         const brakeMats = glbWrapper.userData.brakeMaterials as
           | THREE.MeshStandardMaterial[]
           | undefined;
         if (brakeMats && brakeMats.length > 0) {
-          const targetEmissive = isBraking ? 4.8 : 0.65;
+          const targetEmissive = isBraking ? 2.4 : 0.25;
           for (let m = 0; m < brakeMats.length; m++) {
             brakeMats[m].emissiveIntensity = targetEmissive;
           }
         }
 
-        // Incandescencia térmica en los 4 discos de freno cerámicos
+        // Incandescencia térmica en los 4 discos de freno cerámicos dentro de la llanta
         const discThermalMat = glbWrapper.userData.discThermalMaterial as
           | THREE.MeshStandardMaterial
           | undefined;
@@ -668,51 +531,10 @@ export function CarModel({
           discThermalMat.emissiveIntensity =
             Math.pow(brakeHeatRef.current, 1.3) * 4.4;
         }
-
-        // Llamaradas de escape 3D con parpadeo de petardeo (Anti-Lag)
-        const exhaustFlames = glbWrapper.userData.exhaustFlames as
-          | THREE.Group[]
-          | undefined;
-        if (exhaustFlames && exhaustFlames.length > 0) {
-          const showFlame =
-            !derailed &&
-            backfireTimerRef.current > 0 &&
-            Math.random() > 0.18;
-          for (let f = 0; f < exhaustFlames.length; f++) {
-            const fg = exhaustFlames[f];
-            fg.visible = showFlame;
-            if (showFlame) {
-              const sXY = 0.8 + Math.random() * 0.55;
-              const sZ = (overVoltActive ? 1.45 : 0.75) + Math.random() * 0.85;
-              fg.scale.set(sXY, sXY, sZ);
-            }
-          }
-        }
-
-        // Haces volumétricos de los faros delanteros
-        const headlightBeams = glbWrapper.userData.headlightBeams as
-          | THREE.Mesh[]
-          | undefined;
-        if (headlightBeams && headlightBeams.length > 0) {
-          const beamOpacity = isNight ? 0.22 : isRain ? 0.16 : 0.06;
-          for (let b = 0; b < headlightBeams.length; b++) {
-            const bMat = headlightBeams[b]
-              .material as THREE.MeshBasicMaterial;
-            bMat.opacity = beamOpacity;
-          }
-        }
       }
     }
 
     if (isGhost) return;
-
-    // Proyección de faros sobre el asfalto delante del coche
-    if (headlightPoolMeshRef.current) {
-      headlightPoolMeshRef.current.visible = !derailed;
-      const poolMat = headlightPoolMeshRef.current
-        .material as THREE.MeshBasicMaterial;
-      poolMat.opacity = isNight ? 0.52 : isRain ? 0.36 : 0.14;
-    }
 
     if (guidePinMeshRef.current) {
       const pinMat = guidePinMeshRef.current
@@ -732,38 +554,7 @@ export function CarModel({
       }
     }
 
-    for (const lightMesh of [
-      leftBrakeLightRef.current,
-      rightBrakeLightRef.current,
-    ]) {
-      if (!lightMesh) continue;
-      const mat = lightMesh.material as THREE.MeshStandardMaterial;
-      mat.emissiveIntensity = isBraking ? 4.2 : 0.35;
-      lightMesh.scale.setScalar(isBraking ? 1.2 : 1.0);
-    }
-
-    const showSkid = !derailed && (driftIntensity > 0.08 || overVoltActive);
-    const glowScaleZ = overVoltActive ? 1.85 : 0.5 + driftIntensity * 1.9;
-    const glowColorHex = overVoltActive
-      ? 0x38bdf8
-      : driftIntensity > 0.65
-        ? 0xe63946
-        : 0xf59e0b;
-
-    for (const mesh of [leftSkidGlowRef.current, rightSkidGlowRef.current]) {
-      if (!mesh) continue;
-      mesh.visible = showSkid;
-      if (showSkid) {
-        mesh.scale.set(1, 1, glowScaleZ);
-        const mat = mesh.material as THREE.MeshBasicMaterial;
-        mat.color.setHex(glowColorHex);
-        mat.opacity = overVoltActive
-          ? 0.78
-          : Math.min(0.88, 0.25 + driftIntensity * 0.65);
-      }
-    }
-
-    // 3. Emisión de chispas metálicas en la guía delantera
+    // 2. Emisión de chispas metálicas en la guía delantera
     const sparkIntensity = Math.max(
       guideStress,
       driftIntensity * 0.85,
@@ -817,7 +608,7 @@ export function CarModel({
       }
     }
 
-    // 4. Emisión de Humo 3D de Neumáticos al derrapar y Estela de Agua (Spray) en Modo Lluvia
+    // 3. Emisión de Humo 3D de Neumáticos al derrapar y Estela de Agua (Spray) en Modo Lluvia
     const shouldEmitRainSpray = isRain && !derailed && speedMs > 5.5;
     const shouldEmitTireSmoke =
       !isRain &&
@@ -931,92 +722,22 @@ export function CarModel({
           </CarGLBErrorBoundary>
 
           {!isGhost && (
-            <>
-              {/* Haz de luz proyectado por los faros delanteros sobre el asfalto */}
-              <mesh
-                ref={headlightPoolMeshRef}
-                position={[0, 0.032, 5.1]}
-                rotation={[-Math.PI / 2, 0, 0]}
-              >
-                <planeGeometry args={[3.4, 5.8]} />
-                <meshBasicMaterial
-                  map={headlightPoolTex}
-                  color="#E0F2FE"
-                  transparent
-                  opacity={0.22}
-                  blending={THREE.AdditiveBlending}
-                  depthWrite={false}
-                />
-              </mesh>
-
-              {/* Nubes 3D de Humo de Neumáticos en Derrape y Spray de Agua en Lluvia */}
-              <points
-                ref={smokePointsRef}
-                geometry={smokePool.geo}
-                visible={false}
-                frustumCulled={false}
-              >
-                <pointsMaterial
-                  map={softCloudTex}
-                  color="#E2E8F0"
-                  size={0.78}
-                  sizeAttenuation
-                  transparent
-                  opacity={0.44}
-                  depthWrite={false}
-                />
-              </points>
-
-              <mesh ref={leftBrakeLightRef} position={[-0.58, 0.44, -2.14]}>
-                <boxGeometry args={[0.32, 0.07, 0.06]} />
-                <meshStandardMaterial
-                  color="#FF1E38"
-                  emissive="#FF1E38"
-                  emissiveIntensity={0.35}
-                  roughness={0.2}
-                />
-              </mesh>
-              <mesh ref={rightBrakeLightRef} position={[0.58, 0.44, -2.14]}>
-                <boxGeometry args={[0.32, 0.07, 0.06]} />
-                <meshStandardMaterial
-                  color="#FF1E38"
-                  emissive="#FF1E38"
-                  emissiveIntensity={0.35}
-                  roughness={0.2}
-                />
-              </mesh>
-
-              <mesh
-                ref={leftSkidGlowRef}
-                visible={false}
-                position={[-0.86, 0.03, -1.45]}
-                rotation={[-Math.PI / 2, 0, 0]}
-              >
-                <planeGeometry args={[0.36, 1.1]} />
-                <meshBasicMaterial
-                  color="#F59E0B"
-                  transparent
-                  opacity={0.6}
-                  side={THREE.DoubleSide}
-                  depthWrite={false}
-                />
-              </mesh>
-              <mesh
-                ref={rightSkidGlowRef}
-                visible={false}
-                position={[0.86, 0.03, -1.45]}
-                rotation={[-Math.PI / 2, 0, 0]}
-              >
-                <planeGeometry args={[0.36, 1.1]} />
-                <meshBasicMaterial
-                  color="#F59E0B"
-                  transparent
-                  opacity={0.6}
-                  side={THREE.DoubleSide}
-                  depthWrite={false}
-                />
-              </mesh>
-            </>
+            <points
+              ref={smokePointsRef}
+              geometry={smokePool.geo}
+              visible={false}
+              frustumCulled={false}
+            >
+              <pointsMaterial
+                map={softCloudTex}
+                color="#E2E8F0"
+                size={0.78}
+                sizeAttenuation
+                transparent
+                opacity={0.44}
+                depthWrite={false}
+              />
+            </points>
           )}
         </group>
       </group>

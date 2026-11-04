@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { soundEngine } from '@/lib/soundEngine';
-import { useTelemetryStore } from '@/store/store';
+import { useGarageStore, useTelemetryStore } from '@/store/store';
 
 export interface DriverControlInputs {
   throttle: number;
@@ -55,6 +55,17 @@ export function useControls(): React.RefObject<DriverControlInputs> {
 
       soundEngine.unlock();
       if (event.repeat) return;
+
+      const isGarageOpen = useGarageStore.getState().isGarageOpen;
+      const appScreen = useTelemetryStore.getState().appScreen;
+
+      // Mientras el usuario está en el Menú Principal o en el Garaje, bloquear los atajos de carrera
+      if (isGarageOpen || appScreen === 'main-menu') {
+        if (event.code === 'KeyM') {
+          useTelemetryStore.getState().toggleSound();
+        }
+        return;
+      }
 
       switch (event.code) {
         case 'KeyW':
@@ -132,6 +143,13 @@ export function useControls(): React.RefObject<DriverControlInputs> {
       pointerPedalState.throttle = 0;
       pointerPedalState.brake = 0;
       syncCombinedInputs();
+      soundEngine.silenceAll();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        handleWindowBlur();
+      }
     };
 
     const pointerSyncInterval = window.setInterval(syncCombinedInputs, 16);
@@ -139,12 +157,14 @@ export function useControls(): React.RefObject<DriverControlInputs> {
     window.addEventListener('keydown', handleKeyDown, { passive: false });
     window.addEventListener('keyup', handleKeyUp);
     window.addEventListener('blur', handleWindowBlur);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.clearInterval(pointerSyncInterval);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('blur', handleWindowBlur);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 

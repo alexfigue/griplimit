@@ -225,11 +225,50 @@ class ProceduralSlotSoundEngine {
       useStereoPanner: true,
     });
 
+    // Silenciar automáticamente si el usuario minimiza el navegador o cambia de pestaña/ventana
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          this.silenceAll();
+          if (this.ctx && this.ctx.state === 'running') {
+            void this.ctx.suspend();
+          }
+        } else if (!this.isMuted && this.ctx && this.ctx.state === 'suspended') {
+          void this.ctx.resume();
+        }
+      });
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('blur', () => {
+        this.silenceAll();
+      });
+      window.addEventListener('focus', () => {
+        if (
+          !this.isMuted &&
+          typeof document !== 'undefined' &&
+          !document.hidden &&
+          this.ctx &&
+          this.ctx.state === 'suspended'
+        ) {
+          void this.ctx.resume();
+        }
+      });
+    }
+
     this.isInitialized = true;
+  }
+
+  public silenceAll(): void {
+    if (!this.isInitialized) return;
+    this.playerVoice?.silence();
+    this.rivalVoice?.silence();
   }
 
   public setSoundEnabled(enabled: boolean): void {
     this.isMuted = !enabled;
+    if (this.isMuted) {
+      this.silenceAll();
+    }
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.setTargetAtTime(
         this.isMuted ? 0 : 0.32,

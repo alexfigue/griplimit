@@ -134,6 +134,7 @@ export interface LiveAiCarUnit {
   derailTimerSec: number;
   pressureAccumulatorSec: number;
   laneSwitchCooldownSec: number;
+  finishedRace?: boolean;
 }
 
 /** Estado 0-GC del rival principal para compatibilidad directa */
@@ -380,6 +381,7 @@ export function RivalCar() {
       unit.derailTimerSec = 0;
       unit.pressureAccumulatorSec = 0;
       unit.laneSwitchCooldownSec = 1.5;
+      unit.finishedRace = false;
     }
 
     liveRivalState.distanceM = liveRivalGridState[0].distanceM;
@@ -417,6 +419,14 @@ export function RivalCar() {
 
     const dt = Math.min(rawDelta, 0.05);
     const telemetry = useTelemetryStore.getState();
+    const isGarageOpen = useGarageStore.getState().isGarageOpen;
+
+    // En Menú Principal o con el Garaje abierto, mantener los rivales estacionados y en silencio
+    if (telemetry.appScreen === 'main-menu' || isGarageOpen) {
+      soundEngine.silenceRival();
+      return;
+    }
+
     const isRain = telemetry.weatherMode === 'rain';
     const wetGripScale = isRain ? 0.86 : 1.0;
 
@@ -453,6 +463,7 @@ export function RivalCar() {
         unit.lapCount = 1;
         unit.totalDistanceM = unit.startGridOffsetM;
         unit.speedMs = 0;
+        unit.finishedRace = false;
         const startU = (unit.distanceM / trackLengthM) % 1;
         evaluateSplineKinematics(curve, startU, _rivalKinematics);
         _rivalPos
@@ -462,6 +473,30 @@ export function RivalCar() {
         group.position.copy(_rivalPos);
         group.up.copy(_worldUp);
         group.lookAt(_rivalLook);
+        continue;
+      }
+
+      // Si el coche IA ya cruzó la meta final o la carrera ha concluido, frenada suave Parc Fermé
+      if (unit.finishedRace || telemetry.cupStartPhase === 'finished') {
+        unit.speedMs = Math.max(0, unit.speedMs - 22 * dt);
+        unit.distanceM =
+          (unit.distanceM + unit.speedMs * dt) % trackLengthM;
+        unit.totalDistanceM =
+          telemetry.cupTargetLaps * trackLengthM + unit.distanceM;
+        const finishU = unit.distanceM / trackLengthM;
+        evaluateSplineKinematics(curve, finishU, _rivalKinematics);
+        _rivalPos
+          .copy(_rivalKinematics.position)
+          .addScaledVector(_rivalKinematics.right, unit.lateralOffsetM);
+        _rivalLook.copy(_rivalPos).add(_rivalKinematics.tangent);
+        group.position.copy(_rivalPos);
+        group.up.copy(_worldUp);
+        group.lookAt(_rivalLook);
+        vis.speedMs = unit.speedMs;
+        vis.brakeIntensity = unit.speedMs > 0.5 ? 0.8 : 0;
+        vis.driftIntensity = 0;
+        vis.driftYawRad = 0;
+        vis.bodyRollRad = 0;
         continue;
       }
 
@@ -618,17 +653,15 @@ export function RivalCar() {
 
       const nextDistance = unit.distanceM + unit.speedMs * arcScale * dt;
       if (nextDistance >= trackLengthM) {
-        if (
-          telemetry.cupStartPhase !== 'finished' &&
-          unit.lapCount >= telemetry.cupTargetLaps
-        ) {
-          unit.lapCount += 1;
+        if (unit.lapCount >= telemetry.cupTargetLaps) {
+          unit.lapCount = telemetry.cupTargetLaps + 1;
+          unit.finishedRace = true;
           unit.distanceM =
             ((nextDistance % trackLengthM) + trackLengthM) % trackLengthM;
           unit.totalDistanceM =
-            (unit.lapCount - 1) * trackLengthM + unit.distanceM;
-          const finalStandings = buildLiveGridStandings();
-          telemetry.finishGridRace(finalStandings);
+            telemetry.cupTargetLaps * trackLengthM + unit.distanceM;
+          // Activar cuenta atrás de 30s para que el jugador cruce la meta
+          telemetry.notifyAiLeaderFinished();
         } else {
           unit.lapCount += 1;
         }
@@ -728,6 +761,7 @@ export function RivalCar() {
 
     if (
       telemetry.cupStartPhase !== 'countdown' &&
+      telemetry.cupStartPhase !== 'finished' &&
       Number.isFinite(closestDistToCam)
     ) {
       _toRivalVec.subVectors(_closestRivalPos, state.camera.position);

@@ -22,6 +22,7 @@ export type RaceMode =
   | 'grand-prix'
   | 'license-school'
   | 'championship';
+export type AppScreenMode = 'main-menu' | 'racing';
 export type MagnetMode = 'gt-magnet' | 'wood-free';
 export type CupStartPhase = 'countdown' | 'green' | 'racing' | 'finished';
 export type BrakeAdviceLevel = 'clear' | 'coast' | 'brake';
@@ -286,11 +287,14 @@ export interface TelemetryStoreState extends TelemetrySnapshot {
   readonly environmentStyle: EnvironmentStyle;
   readonly weatherMode: WeatherMode;
   readonly raceMode: RaceMode;
+  readonly appScreen: AppScreenMode;
   readonly cupStartPhase: CupStartPhase;
   readonly countdownLights: 0 | 1 | 2 | 3 | 4 | 5;
   readonly cupTargetLaps: number;
   readonly cupWinner: 'player' | 'rival' | null;
   readonly cupRewardGp: number;
+  readonly leaderFinishedTimerSec: number | null;
+  readonly playerDidNotFinish: boolean;
   readonly activeLicenseId: string;
   readonly licenseProgress: Readonly<Record<string, LicenseProgressRecord>>;
   readonly lastLicenseResult: LicenseAttemptSummary | null;
@@ -327,11 +331,16 @@ export interface TelemetryStoreState extends TelemetrySnapshot {
     speedTraceKmh?: readonly number[];
   }) => LapEvaluationSummary;
   bumpGhostVersion: () => void;
+  setAppScreen: (screen: AppScreenMode) => void;
   setTrackId: (trackId: TrackId) => void;
   setRaceMode: (mode: RaceMode) => void;
   selectLicenseChallenge: (challengeId: string) => void;
   completeLicenseAttempt: (lapTimeMs: number, derailed: boolean) => void;
-  finishGridRace: (finalStandings: readonly GridStandingRow[]) => void;
+  notifyAiLeaderFinished: () => void;
+  finishGridRace: (
+    finalStandings: readonly GridStandingRow[],
+    didNotFinish?: boolean
+  ) => void;
   advanceChampionshipRound: () => void;
   restartChampionship: () => void;
   startCupRace: () => void;

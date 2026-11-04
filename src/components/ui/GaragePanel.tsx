@@ -73,6 +73,9 @@ export function GaragePanel() {
   const magnetMode = useTelemetryStore((s) => s.magnetMode);
   const toggleMagnetMode = useTelemetryStore((s) => s.toggleMagnetMode);
 
+  const appScreen = useTelemetryStore((s) => s.appScreen);
+  const setAppScreen = useTelemetryStore((s) => s.setAppScreen);
+
   const selectOrBuyPart = useGarageStore((s) => s.selectOrBuyPart);
   const toggleSandboxUnlocked = useGarageStore((s) => s.toggleSandboxUnlocked);
   const importCommunityCarGLB = useGarageStore((s) => s.importCommunityCarGLB);
@@ -176,88 +179,105 @@ export function GaragePanel() {
     );
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div className="pointer-events-auto relative">
-      <button
-        type="button"
-        onClick={() => setGarageOpen(!isOpen)}
-        aria-expanded={isOpen}
-        className={`flex items-center gap-3 rounded-md border px-3.5 py-2 text-left backdrop-blur-md transition-colors ${
-          isOpen
-            ? 'border-[#2F81F7] bg-[#1A2332]/95'
-            : 'border-slate-700/90 bg-[#151B24]/92 hover:border-[#2F81F7]'
-        }`}
-      >
-        <div>
-          <span className="block font-display text-xs font-bold text-[#F0F4F8]">
-            Garaje · {activeParts.body.name}
+    <div className="pointer-events-none fixed inset-0 z-50 flex flex-col justify-between sm:flex-row">
+      {/* Zona izquierda despejada para contemplar el coche en la cámara Showroom 360° */}
+      <div className="flex flex-1 flex-col justify-between p-4 sm:p-6">
+        <div className="pointer-events-auto flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setGarageOpen(false)}
+            className="flex items-center gap-2 rounded-md border border-slate-700 bg-[#151B24]/95 px-4 py-2 font-display text-xs font-bold text-slate-100 shadow-lg backdrop-blur-md transition-colors hover:border-slate-400 hover:bg-slate-800"
+          >
+            ← {appScreen === 'main-menu' ? 'Volver al Menú Principal' : 'Volver a Pista'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setGarageOpen(false);
+              setAppScreen('racing');
+            }}
+            className="flex items-center gap-2 rounded-md border border-emerald-500/80 bg-emerald-500/20 px-4 py-2 font-display text-xs font-bold text-emerald-300 shadow-lg backdrop-blur-md transition-colors hover:bg-emerald-500/30"
+          >
+            🏁 Salir a Pista con este Setup
+          </button>
+        </div>
+
+        <div className="pointer-events-auto hidden max-w-md rounded-md border border-slate-800/90 bg-[#0D1117]/88 px-4 py-3 backdrop-blur-md sm:block">
+          <span className="block font-mono text-[10px] font-bold tracking-wider text-cyan-400 uppercase">
+            🎥 Showroom 360° En Vivo · Geometría 3D Limpia
           </span>
-          <span className="block font-mono text-[11px] tabular-nums text-slate-400">
-            <span className="font-semibold text-emerald-400">
-              Acceso Total
-            </span>{' '}
-            · {carStats.TotalWeight} kg · {Math.round(carStats.TotalGrip)} N
+          <span className="mt-0.5 block font-display text-base font-extrabold text-white">
+            {activeParts.body.name}
+          </span>
+          <span className="mt-0.5 block font-mono text-[11px] text-slate-400">
+            Motor: {activeParts.engine.name} · Neumáticos: {activeParts.tires.name}
           </span>
         </div>
-        <span className="rounded-xs bg-[#2F81F7]/20 px-2 py-0.5 font-mono text-[11px] font-semibold text-[#2F81F7]">
-          {isOpen ? 'Cerrar' : 'Piezas'}
-        </span>
-      </button>
+      </div>
 
-      {isOpen && (
-        <div className="absolute top-full right-0 z-40 mt-2 w-84 sm:w-[420px] max-h-[80vh] overflow-y-auto rounded-md border border-slate-700/90 bg-[#151B24]/97 p-4 shadow-2xl backdrop-blur-md">
-          {/* Barra superior de Acceso Total al Garaje + Showroom 360° */}
-          <div className="mb-2.5 flex items-center justify-between gap-2 rounded-xs border border-slate-800 bg-[#0D1117]/90 px-3 py-2">
-            <div>
-              <span className="block font-mono text-[10px] text-cyan-400">
-                🎥 Showroom 360° activo · Acceso Completo Pro
-              </span>
-              <span className="font-mono text-xs font-bold text-emerald-400">
-                ✓ Todos los coches (100k+ vértices) y piezas desbloqueados
-              </span>
-            </div>
+      {/* Cajón lateral derecho de Ingeniería y Pintura PBR */}
+      <div className="pointer-events-auto h-[68vh] w-full overflow-y-auto border-t border-slate-700/90 bg-[#151B24]/97 p-4 shadow-2xl backdrop-blur-xl sm:h-full sm:w-[440px] sm:border-t-0 sm:border-l">
+        <div className="mb-3 flex items-center justify-between gap-2 rounded-xs border border-slate-800 bg-[#0D1117]/90 px-3 py-2">
+          <div>
+            <span className="block font-mono text-[10px] text-cyan-400 uppercase">
+              Estudio de Ingeniería y Pintura PBR
+            </span>
+            <span className="font-mono text-xs font-bold text-emerald-400">
+              ✓ Todos los coches (100k+ vértices) y piezas desbloqueados
+            </span>
           </div>
+          <button
+            type="button"
+            onClick={() => setGarageOpen(false)}
+            className="rounded-xs border border-slate-700 bg-slate-800/90 px-2.5 py-1 font-mono text-[11px] font-bold text-slate-200 hover:border-slate-500"
+          >
+            ✕ Cerrar
+          </button>
+        </div>
 
-          {notice && (
-            <div className="mb-2.5 rounded-xs border border-[#F59E0B]/60 bg-[#F59E0B]/15 px-2.5 py-1.5 text-[11px] text-amber-100">
-              {notice}
-            </div>
-          )}
+        {notice && (
+          <div className="mb-2.5 rounded-xs border border-[#F59E0B]/60 bg-[#F59E0B]/15 px-2.5 py-1.5 text-[11px] text-amber-100">
+            {notice}
+          </div>
+        )}
 
-          {/* Resumen consolidado de ingeniería */}
-          <div className="grid grid-cols-3 gap-2 rounded-xs border border-slate-800 bg-[#0D1117]/90 p-2.5 font-mono text-xs tabular-nums">
-            <div>
-              <span className="block text-[10px] text-slate-400">Peso total</span>
-              <span className="font-semibold text-[#F0F4F8]">
-                {carStats.TotalWeight} kg
-              </span>
-            </div>
-            <div>
-              <span className="block text-[10px] text-slate-400">Vel. punta</span>
-              <span className="font-semibold text-[#F0F4F8]">
-                {carStats.MaxSpeed} km/h
-              </span>
-            </div>
-            <div>
-              <span className="block text-[10px] text-slate-400">Aceleración</span>
-              <span className="font-semibold text-[#F0F4F8]">
-                {carStats.Acceleration} m/s²
-              </span>
-            </div>
-            <div>
-              <span className="block text-[10px] text-slate-400">Grip base</span>
-              <span className="font-semibold text-[#2F81F7]">
-                {Math.round(carStats.TotalGrip)} N
-              </span>
-            </div>
-            <div>
-              <span className="block text-[10px] text-slate-400">Carga aero</span>
-              <span className="font-semibold text-emerald-400">
-                +{carStats.AeroDownforceCoeff} v²
-              </span>
-            </div>
-            <div>
-              <span className="block text-[10px] text-slate-400">Techo derrape</span>
+        {/* Resumen consolidado de ingeniería */}
+        <div className="grid grid-cols-3 gap-2 rounded-xs border border-slate-800 bg-[#0D1117]/90 p-2.5 font-mono text-xs tabular-nums">
+          <div>
+            <span className="block text-[10px] text-slate-400">Peso total</span>
+            <span className="font-semibold text-[#F0F4F8]">
+              {carStats.TotalWeight} kg
+            </span>
+          </div>
+          <div>
+            <span className="block text-[10px] text-slate-400">Vel. punta</span>
+            <span className="font-semibold text-[#F0F4F8]">
+              {carStats.MaxSpeed} km/h
+            </span>
+          </div>
+          <div>
+            <span className="block text-[10px] text-slate-400">Aceleración</span>
+            <span className="font-semibold text-[#F0F4F8]">
+              {carStats.Acceleration} m/s²
+            </span>
+          </div>
+          <div>
+            <span className="block text-[10px] text-slate-400">Grip base</span>
+            <span className="font-semibold text-[#2F81F7]">
+              {Math.round(carStats.TotalGrip)} N
+            </span>
+          </div>
+          <div>
+            <span className="block text-[10px] text-slate-400">Carga aero</span>
+            <span className="font-semibold text-emerald-400">
+              +{carStats.AeroDownforceCoeff} v²
+            </span>
+          </div>
+          <div>
+            <span className="block text-[10px] text-slate-400">Techo derrape</span>
               <span className="font-semibold text-[#F59E0B]">
                 {Math.round(
                   (carStats.DriftCeilingRatio +
@@ -885,8 +905,7 @@ export function GaragePanel() {
               </div>
             )}
           </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
