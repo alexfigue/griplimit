@@ -11,11 +11,17 @@ import type {
   BodyShellPart,
   CameraMode,
   CarLoadout,
+  ChampionshipStandingRow,
   CupStartPhase,
   CustomAeroArchetype,
   GarageStoreState,
+  GridStandingRow,
   LapEvaluationSummary,
   LapMedalGrade,
+  LicenseAttemptSummary,
+  LicenseChallengeSpec,
+  LicenseMedalGrade,
+  LicenseProgressRecord,
   PartCategory,
   PartsCatalog,
   RaceMode,
@@ -30,6 +36,7 @@ const partsCatalog: PartsCatalog = rawCatalog;
 
 const GARAGE_STORAGE_KEY = 'griplimit_garage_v3';
 const RECORDS_STORAGE_KEY = 'griplimit_records_v2';
+const LICENSE_STORAGE_KEY = 'griplimit_licenses_v1';
 const LEGACY_BEST_LAPS_KEY = 'griplimit_best_laps_v1';
 const INITIAL_GP_CREDITS = 9999;
 
@@ -38,6 +45,107 @@ const CUP_VICTORY_PRIZE_BY_TRACK: Record<TrackId, number> = {
   'sierra-seca': 600,
   'neo-wangan': 850,
 };
+
+export const CHAMPIONSHIP_TRACK_ORDER: readonly [TrackId, TrackId, TrackId] = [
+  'montmelo',
+  'sierra-seca',
+  'neo-wangan',
+];
+
+export const FIA_POINTS_BY_POSITION: Record<1 | 2 | 3 | 4, number> = {
+  1: 25,
+  2: 18,
+  3: 15,
+  4: 12,
+};
+
+export const LICENSE_CHALLENGES: readonly LicenseChallengeSpec[] = [
+  {
+    id: 'lic-b1',
+    code: 'B-1',
+    title: 'Montmeló Sprint FIA',
+    subtitle: '1 vuelta lanzada limpia en seco con Imán GT',
+    trackId: 'montmelo',
+    weatherMode: 'dry',
+    magnetMode: 'gt-magnet',
+    goldMs: 19600,
+    silverMs: 21600,
+    bronzeMs: 24800,
+    rewardGoldGp: 400,
+  },
+  {
+    id: 'lic-b2',
+    code: 'B-2',
+    title: 'Catalunya Wood Drift',
+    subtitle: 'Control de trasera sin imán (Modo Wood) en Montmeló',
+    trackId: 'montmelo',
+    weatherMode: 'dry',
+    magnetMode: 'wood-free',
+    goldMs: 20400,
+    silverMs: 22600,
+    bronzeMs: 26000,
+    rewardGoldGp: 450,
+  },
+  {
+    id: 'lic-a1',
+    code: 'A-1',
+    title: 'Sacacorchos Sierra Seca',
+    subtitle: 'Trazada de montaña y frenada en pendiente',
+    trackId: 'sierra-seca',
+    weatherMode: 'dry',
+    magnetMode: 'gt-magnet',
+    goldMs: 20800,
+    silverMs: 22900,
+    bronzeMs: 26200,
+    rewardGoldGp: 500,
+  },
+  {
+    id: 'lic-a2',
+    code: 'A-2',
+    title: 'Tormenta en el Puerto',
+    subtitle: 'Control de aquaplaning sobre asfalto mojado en Sierra Seca',
+    trackId: 'sierra-seca',
+    weatherMode: 'rain',
+    magnetMode: 'gt-magnet',
+    goldMs: 22300,
+    silverMs: 24600,
+    bronzeMs: 28200,
+    rewardGoldGp: 600,
+  },
+  {
+    id: 'lic-s1',
+    code: 'S-1',
+    title: 'Expreso Nocturno Wangan C1',
+    subtitle: 'Alta velocidad punta entre muros de hormigón en Tokio',
+    trackId: 'neo-wangan',
+    weatherMode: 'dry',
+    magnetMode: 'gt-magnet',
+    goldMs: 21100,
+    silverMs: 23400,
+    bronzeMs: 26800,
+    rewardGoldGp: 650,
+  },
+  {
+    id: 'lic-s2',
+    code: 'S-2',
+    title: 'Superlicencia FIA · Wangan Wood Wet',
+    subtitle: 'El examen definitivo: Sin Imán (Wood) + Lluvia Nocturna en Tokio',
+    trackId: 'neo-wangan',
+    weatherMode: 'rain',
+    magnetMode: 'wood-free',
+    goldMs: 22900,
+    silverMs: 25400,
+    bronzeMs: 29200,
+    rewardGoldGp: 900,
+  },
+];
+
+export const INITIAL_CHAMPIONSHIP_STANDINGS: readonly ChampionshipStandingRow[] = [
+  { driverId: 'player', name: 'Tú (Piloto Oficial)', isPlayer: true, points: 0, wins: 0 },
+  { driverId: 'ai-1', name: 'Kai · Huracán GT3', isPlayer: false, points: 0, wins: 0 },
+  { driverId: 'ai-2', name: 'Mako · Senna GTR', isPlayer: false, points: 0, wins: 0 },
+  { driverId: 'ai-3', name: 'Viktor · Skyline R34', isPlayer: false, points: 0, wins: 0 },
+];
 
 function computeAllCatalogPartIds(catalog: PartsCatalog): string[] {
   const ids: string[] = [];
@@ -422,6 +530,65 @@ function savePersistedRecords(payload: PersistedRecordsPayload): void {
   }
 }
 
+function createInitialLicenseProgress(): Record<string, LicenseProgressRecord> {
+  const base: Record<string, LicenseProgressRecord> = {};
+  for (const lic of LICENSE_CHALLENGES) {
+    base[lic.id] = { medal: 'none', bestTimeMs: null };
+  }
+  return base;
+}
+
+function loadPersistedLicenseProgress(): Record<string, LicenseProgressRecord> {
+  const fallback = createInitialLicenseProgress();
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const raw = window.localStorage.getItem(LICENSE_STORAGE_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw) as Record<
+      string,
+      Partial<LicenseProgressRecord>
+    >;
+    for (const lic of LICENSE_CHALLENGES) {
+      const entry = parsed?.[lic.id];
+      if (entry) {
+        const medal: LicenseMedalGrade =
+          entry.medal === 'gold' ||
+          entry.medal === 'silver' ||
+          entry.medal === 'bronze'
+            ? entry.medal
+            : 'none';
+        const bestTimeMs =
+          typeof entry.bestTimeMs === 'number' &&
+          Number.isFinite(entry.bestTimeMs)
+            ? entry.bestTimeMs
+            : null;
+        fallback[lic.id] = { medal, bestTimeMs };
+      }
+    }
+    return fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function savePersistedLicenseProgress(
+  progress: Readonly<Record<string, LicenseProgressRecord>>
+): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(LICENSE_STORAGE_KEY, JSON.stringify(progress));
+  } catch {
+    // Ignorar cuota
+  }
+}
+
+const MEDAL_RANK: Record<LicenseMedalGrade, number> = {
+  none: 0,
+  bronze: 1,
+  silver: 2,
+  gold: 3,
+};
+
 const INITIAL_TELEMETRY_SNAPSHOT: TelemetrySnapshot = {
   speedMs: 0,
   speedKmh: 0,
@@ -454,13 +621,15 @@ const INITIAL_TELEMETRY_SNAPSHOT: TelemetrySnapshot = {
   turboStartActive: false,
   gapToRivalM: 0,
   playerRacePosition: 1,
+  totalCarsInRace: 2,
   rivalLapCount: 1,
+  liveGridStandings: [],
   tireTempsC: [56, 56, 56, 56],
   tireThermalGripFactor: 0.96,
 };
 
 /**
- * STORE 2: TELEMETRÍA EN TIEMPO REAL, 2 MODOS DE JUEGO (CONTRARRELOJ / VS IA) Y SEMÁFORO F1
+ * STORE 2: TELEMETRÍA EN TIEMPO REAL, 5 MODOS SINGLE-PLAYER Y SEMÁFORO F1
  */
 export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
   const ensureRecordsLoaded = (): PersistedRecordsPayload => {
@@ -488,12 +657,19 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
     cameraMode: 'chase',
     environmentStyle: 'realistic',
     weatherMode: 'dry',
-    raceMode: 'vs-ai',
+    raceMode: 'grand-prix',
+    totalCarsInRace: 4,
     cupStartPhase: 'countdown',
     countdownLights: 1,
     cupTargetLaps: 3,
     cupWinner: null,
     cupRewardGp: 0,
+    activeLicenseId: LICENSE_CHALLENGES[0].id,
+    licenseProgress: loadPersistedLicenseProgress(),
+    lastLicenseResult: null,
+    championshipRoundIndex: 0,
+    championshipCompleted: false,
+    championshipStandings: INITIAL_CHAMPIONSHIP_STANDINGS,
     overVoltTriggerNonce: 0,
     resetNonce: 0,
     ghostVersionNonce: 0,
@@ -662,6 +838,7 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
         countdownLights: 1,
         cupWinner: null,
         cupRewardGp: 0,
+        lastLicenseResult: null,
         resetNonce: state.resetNonce + 1,
         lapCount: 1,
         rivalLapCount: 1,
@@ -694,19 +871,57 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
 
     setRaceMode: (mode: RaceMode) => {
       useGarageStore.getState().setGarageOpen(false);
-      set((state) => ({
+      const state = get();
+      const { bestLaps } = ensureRecordsLoaded();
+
+      let nextTrackId = state.trackId;
+      let nextWeather = state.weatherMode;
+      let nextMagnet = state.magnetMode;
+      let targetLaps = 3;
+      let totalCars: 1 | 2 | 4 = 1;
+
+      if (mode === 'vs-ai') {
+        totalCars = 2;
+        targetLaps = 3;
+      } else if (mode === 'grand-prix') {
+        totalCars = 4;
+        targetLaps = 3;
+      } else if (mode === 'championship') {
+        totalCars = 4;
+        targetLaps = 3;
+        nextTrackId = CHAMPIONSHIP_TRACK_ORDER[state.championshipRoundIndex];
+      } else if (mode === 'license-school') {
+        totalCars = 1;
+        targetLaps = 1;
+        const activeChallenge =
+          LICENSE_CHALLENGES.find((c) => c.id === state.activeLicenseId) ??
+          LICENSE_CHALLENGES[0];
+        nextTrackId = activeChallenge.trackId;
+        nextWeather = activeChallenge.weatherMode;
+        nextMagnet = activeChallenge.magnetMode;
+      }
+
+      set({
         raceMode: mode,
-        rivalEnabled: mode === 'vs-ai',
+        trackId: nextTrackId,
+        weatherMode: nextWeather,
+        magnetMode: nextMagnet,
+        rivalEnabled:
+          mode === 'vs-ai' || mode === 'grand-prix' || mode === 'championship',
+        totalCarsInRace: totalCars,
+        cupTargetLaps: targetLaps,
         cupStartPhase: 'countdown',
         countdownLights: 1,
         cupWinner: null,
         cupRewardGp: 0,
+        lastLicenseResult: null,
         resetNonce: state.resetNonce + 1,
         lapCount: 1,
         rivalLapCount: 1,
-        playerRacePosition: 1,
+        playerRacePosition: totalCars === 4 ? 4 : 1,
         gapToRivalM: 0,
         currentLapTimeMs: 0,
+        bestLapTimeMs: bestLaps[nextTrackId],
         currentSectors: EMPTY_SECTOR_SPLITS,
         lastLapSummary: null,
         isDerailed: false,
@@ -724,6 +939,261 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
         overVoltActive: false,
         falseStartPenalty: false,
         turboStartActive: false,
+      });
+    },
+
+    selectLicenseChallenge: (challengeId: string) => {
+      const challenge =
+        LICENSE_CHALLENGES.find((c) => c.id === challengeId) ??
+        LICENSE_CHALLENGES[0];
+      const { bestLaps } = ensureRecordsLoaded();
+
+      set((state) => ({
+        raceMode: 'license-school',
+        activeLicenseId: challenge.id,
+        trackId: challenge.trackId,
+        weatherMode: challenge.weatherMode,
+        magnetMode: challenge.magnetMode,
+        rivalEnabled: false,
+        totalCarsInRace: 1,
+        cupTargetLaps: 1,
+        cupStartPhase: 'countdown',
+        countdownLights: 1,
+        cupWinner: null,
+        lastLicenseResult: null,
+        resetNonce: state.resetNonce + 1,
+        lapCount: 1,
+        currentLapTimeMs: 0,
+        bestLapTimeMs: bestLaps[challenge.trackId],
+        currentSectors: EMPTY_SECTOR_SPLITS,
+        lastLapSummary: null,
+        isDerailed: false,
+        isDrifting: false,
+        driftAngleDeg: 0,
+        guideStressRatio: 0,
+        speedMs: 0,
+        speedKmh: 0,
+        gear: 0,
+        engineRpm: 1650,
+      }));
+    },
+
+    completeLicenseAttempt: (lapTimeMs: number, derailed: boolean) => {
+      const state = get();
+      if (
+        state.raceMode !== 'license-school' ||
+        state.cupStartPhase === 'finished'
+      ) {
+        return;
+      }
+
+      const challenge =
+        LICENSE_CHALLENGES.find((c) => c.id === state.activeLicenseId) ??
+        LICENSE_CHALLENGES[0];
+
+      let achievedMedal: LicenseMedalGrade = 'none';
+      if (!derailed) {
+        if (lapTimeMs <= challenge.goldMs) {
+          achievedMedal = 'gold';
+        } else if (lapTimeMs <= challenge.silverMs) {
+          achievedMedal = 'silver';
+        } else if (lapTimeMs <= challenge.bronzeMs) {
+          achievedMedal = 'bronze';
+        }
+      }
+
+      const currentProgress =
+        state.licenseProgress[challenge.id] ?? {
+          medal: 'none',
+          bestTimeMs: null,
+        };
+
+      const isNewBest =
+        !derailed &&
+        (currentProgress.bestTimeMs === null ||
+          lapTimeMs < currentProgress.bestTimeMs);
+
+      const nextBestTime = isNewBest ? lapTimeMs : currentProgress.bestTimeMs;
+      const nextBestMedal =
+        MEDAL_RANK[achievedMedal] > MEDAL_RANK[currentProgress.medal]
+          ? achievedMedal
+          : currentProgress.medal;
+
+      const updatedProgress: Record<string, LicenseProgressRecord> = {
+        ...state.licenseProgress,
+        [challenge.id]: {
+          medal: nextBestMedal,
+          bestTimeMs: nextBestTime,
+        },
+      };
+      savePersistedLicenseProgress(updatedProgress);
+
+      const earnedGp =
+        achievedMedal === 'gold'
+          ? challenge.rewardGoldGp
+          : achievedMedal === 'silver'
+            ? Math.round(challenge.rewardGoldGp * 0.6)
+            : achievedMedal === 'bronze'
+              ? Math.round(challenge.rewardGoldGp * 0.35)
+              : 0;
+
+      if (earnedGp > 0) {
+        useGarageStore.getState().addGpCredits(earnedGp);
+      }
+
+      const summary: LicenseAttemptSummary = {
+        challengeId: challenge.id,
+        timeMs: lapTimeMs,
+        medal: achievedMedal,
+        isNewBest,
+        earnedGp,
+        failedByDerail: derailed,
+      };
+
+      set({
+        cupStartPhase: 'finished',
+        licenseProgress: updatedProgress,
+        lastLicenseResult: summary,
+      });
+    },
+
+    finishGridRace: (finalStandings: readonly GridStandingRow[]) => {
+      const state = get();
+      if (state.cupStartPhase === 'finished') return;
+
+      const playerRow = finalStandings.find((r) => r.isPlayer);
+      const playerPos: 1 | 2 | 3 | 4 = playerRow?.position ?? 4;
+      const isPlayerWinner = playerPos === 1;
+
+      const basePrize = CUP_VICTORY_PRIZE_BY_TRACK[state.trackId];
+      const reward =
+        playerPos === 1
+          ? basePrize
+          : playerPos === 2
+            ? Math.round(basePrize * 0.65)
+            : playerPos === 3
+              ? Math.round(basePrize * 0.45)
+              : 140;
+
+      useGarageStore.getState().addGpCredits(reward);
+
+      if (state.raceMode === 'championship') {
+        const updatedChampionship = state.championshipStandings
+          .map((row) => {
+            const match = finalStandings.find(
+              (s) => s.driverId === row.driverId
+            );
+            const pos: 1 | 2 | 3 | 4 = match?.position ?? 4;
+            const addPts = FIA_POINTS_BY_POSITION[pos];
+            return {
+              ...row,
+              points: row.points + addPts,
+              wins: row.wins + (pos === 1 ? 1 : 0),
+            };
+          })
+          .sort((a, b) => b.points - a.points || b.wins - a.wins);
+
+        const isFinalRound = state.championshipRoundIndex >= 2;
+        if (isFinalRound && updatedChampionship[0]?.isPlayer) {
+          useGarageStore.getState().addGpCredits(1500);
+        }
+
+        set({
+          cupStartPhase: 'finished',
+          cupWinner: isPlayerWinner ? 'player' : 'rival',
+          cupRewardGp: reward,
+          playerRacePosition: playerPos,
+          liveGridStandings: finalStandings,
+          championshipStandings: updatedChampionship,
+          championshipCompleted: isFinalRound,
+        });
+        return;
+      }
+
+      set({
+        cupStartPhase: 'finished',
+        cupWinner: isPlayerWinner ? 'player' : 'rival',
+        cupRewardGp: reward,
+        playerRacePosition: playerPos,
+        liveGridStandings: finalStandings,
+      });
+    },
+
+    advanceChampionshipRound: () => {
+      const state = get();
+      const nextRound = Math.min(2, state.championshipRoundIndex + 1) as
+        | 0
+        | 1
+        | 2;
+      const nextTrack = CHAMPIONSHIP_TRACK_ORDER[nextRound];
+      const { bestLaps } = ensureRecordsLoaded();
+
+      set({
+        raceMode: 'championship',
+        championshipRoundIndex: nextRound,
+        championshipCompleted: false,
+        trackId: nextTrack,
+        rivalEnabled: true,
+        totalCarsInRace: 4,
+        cupTargetLaps: 3,
+        cupStartPhase: 'countdown',
+        countdownLights: 1,
+        cupWinner: null,
+        cupRewardGp: 0,
+        resetNonce: state.resetNonce + 1,
+        lapCount: 1,
+        rivalLapCount: 1,
+        playerRacePosition: 4,
+        gapToRivalM: 0,
+        currentLapTimeMs: 0,
+        bestLapTimeMs: bestLaps[nextTrack],
+        currentSectors: EMPTY_SECTOR_SPLITS,
+        lastLapSummary: null,
+        isDerailed: false,
+        isDrifting: false,
+        driftAngleDeg: 0,
+        guideStressRatio: 0,
+        speedMs: 0,
+        speedKmh: 0,
+        gear: 0,
+        engineRpm: 1650,
+      });
+    },
+
+    restartChampionship: () => {
+      const firstTrack = CHAMPIONSHIP_TRACK_ORDER[0];
+      const { bestLaps } = ensureRecordsLoaded();
+
+      set((state) => ({
+        raceMode: 'championship',
+        championshipRoundIndex: 0,
+        championshipCompleted: false,
+        championshipStandings: INITIAL_CHAMPIONSHIP_STANDINGS,
+        trackId: firstTrack,
+        rivalEnabled: true,
+        totalCarsInRace: 4,
+        cupTargetLaps: 3,
+        cupStartPhase: 'countdown',
+        countdownLights: 1,
+        cupWinner: null,
+        cupRewardGp: 0,
+        resetNonce: state.resetNonce + 1,
+        lapCount: 1,
+        rivalLapCount: 1,
+        playerRacePosition: 4,
+        gapToRivalM: 0,
+        currentLapTimeMs: 0,
+        bestLapTimeMs: bestLaps[firstTrack],
+        currentSectors: EMPTY_SECTOR_SPLITS,
+        lastLapSummary: null,
+        isDerailed: false,
+        isDrifting: false,
+        driftAngleDeg: 0,
+        guideStressRatio: 0,
+        speedMs: 0,
+        speedKmh: 0,
+        gear: 0,
+        engineRpm: 1650,
       }));
     },
 
@@ -784,7 +1254,7 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
 
     toggleRival: () => {
       const nextMode: RaceMode =
-        get().raceMode === 'vs-ai' ? 'time-trial' : 'vs-ai';
+        get().raceMode === 'time-trial' ? 'grand-prix' : 'time-trial';
       get().setRaceMode(nextMode);
     },
 
@@ -818,8 +1288,8 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
 
     requestTrackReset: () =>
       set((state) => {
-        // Si el coche está descarrilado, lo reencarrila en marcha; si está en pista, reinicia la Salida en Parrilla con Semáforo F1
-        if (state.isDerailed) {
+        // En Escuela de Licencias, [R] siempre reinicia el intento desde el Semáforo F1
+        if (state.isDerailed && state.raceMode !== 'license-school') {
           return {
             resetNonce: state.resetNonce + 1,
             isDerailed: false,
@@ -838,6 +1308,7 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
           cupStartPhase: 'countdown',
           countdownLights: 1,
           cupWinner: null,
+          lastLicenseResult: null,
           resetNonce: state.resetNonce + 1,
           lapCount: 1,
           rivalLapCount: 1,

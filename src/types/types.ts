@@ -10,14 +10,58 @@ export type LaneId = 'left' | 'right';
 export type CameraMode = 'chase' | 'cockpit' | 'overhead';
 export type EnvironmentStyle = 'realistic' | 'tabletop';
 export type WeatherMode = 'dry' | 'rain';
-export type RaceMode = 'time-trial' | 'vs-ai';
+export type RaceMode =
+  | 'time-trial'
+  | 'vs-ai'
+  | 'grand-prix'
+  | 'license-school'
+  | 'championship';
 export type MagnetMode = 'gt-magnet' | 'wood-free';
 export type CupStartPhase = 'countdown' | 'green' | 'racing' | 'finished';
 export type BrakeAdviceLevel = 'clear' | 'coast' | 'brake';
 export type SectorColor = 'pending' | 'purple' | 'green' | 'amber';
 export type LapMedalGrade = 'perfect' | 'drift-master' | 'clean' | 'completed';
+export type LicenseMedalGrade = 'none' | 'bronze' | 'silver' | 'gold';
 export type CustomAeroArchetype = 'balanced' | 'downforce' | 'topspeed';
 export type PartCategory = 'bodies' | 'engines' | 'tires' | 'rollers' | 'chassis';
+
+export interface LicenseChallengeSpec {
+  readonly id: string;
+  readonly code: string;
+  readonly title: string;
+  readonly subtitle: string;
+  readonly trackId: TrackId;
+  readonly weatherMode: WeatherMode;
+  readonly magnetMode: MagnetMode;
+  readonly goldMs: number;
+  readonly silverMs: number;
+  readonly bronzeMs: number;
+  readonly rewardGoldGp: number;
+}
+
+export interface LicenseProgressRecord {
+  readonly medal: LicenseMedalGrade;
+  readonly bestTimeMs: number | null;
+}
+
+export interface GridStandingRow {
+  readonly driverId: string;
+  readonly name: string;
+  readonly isPlayer: boolean;
+  readonly position: 1 | 2 | 3 | 4;
+  readonly lapCount: number;
+  readonly gapToLeaderM: number;
+  readonly lane: LaneId;
+  readonly isDerailed: boolean;
+}
+
+export interface ChampionshipStandingRow {
+  readonly driverId: string;
+  readonly name: string;
+  readonly isPlayer: boolean;
+  readonly points: number;
+  readonly wins: number;
+}
 
 export interface EnginePart {
   readonly id: string;
@@ -186,12 +230,23 @@ export interface TelemetrySnapshot {
   readonly falseStartPenalty: boolean;
   readonly turboStartActive: boolean;
   readonly gapToRivalM: number;
-  readonly playerRacePosition: 1 | 2;
+  readonly playerRacePosition: 1 | 2 | 3 | 4;
+  readonly totalCarsInRace: 1 | 2 | 4;
   readonly rivalLapCount: number;
+  readonly liveGridStandings: readonly GridStandingRow[];
   /** Temperaturas individuales de los 4 neumáticos [FL, FR, RL, RR] en °C */
   readonly tireTempsC: readonly [number, number, number, number];
   /** Multiplicador de agarre térmico actual (0.86 a 1.03) según ventana óptima (70-98 °C) */
   readonly tireThermalGripFactor: number;
+}
+
+export interface LicenseAttemptSummary {
+  readonly challengeId: string;
+  readonly timeMs: number;
+  readonly medal: LicenseMedalGrade;
+  readonly isNewBest: boolean;
+  readonly earnedGp: number;
+  readonly failedByDerail: boolean;
 }
 
 export interface TelemetryStoreState extends TelemetrySnapshot {
@@ -211,6 +266,12 @@ export interface TelemetryStoreState extends TelemetrySnapshot {
   readonly cupTargetLaps: number;
   readonly cupWinner: 'player' | 'rival' | null;
   readonly cupRewardGp: number;
+  readonly activeLicenseId: string;
+  readonly licenseProgress: Readonly<Record<string, LicenseProgressRecord>>;
+  readonly lastLicenseResult: LicenseAttemptSummary | null;
+  readonly championshipRoundIndex: 0 | 1 | 2;
+  readonly championshipCompleted: boolean;
+  readonly championshipStandings: readonly ChampionshipStandingRow[];
   readonly overVoltTriggerNonce: number;
   readonly resetNonce: number;
   readonly ghostVersionNonce: number;
@@ -238,6 +299,11 @@ export interface TelemetryStoreState extends TelemetrySnapshot {
   bumpGhostVersion: () => void;
   setTrackId: (trackId: TrackId) => void;
   setRaceMode: (mode: RaceMode) => void;
+  selectLicenseChallenge: (challengeId: string) => void;
+  completeLicenseAttempt: (lapTimeMs: number, derailed: boolean) => void;
+  finishGridRace: (finalStandings: readonly GridStandingRow[]) => void;
+  advanceChampionshipRound: () => void;
+  restartChampionship: () => void;
   startCupRace: () => void;
   exitCupRace: () => void;
   setCupCountdownState: (

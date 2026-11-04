@@ -6,7 +6,9 @@ import * as THREE from 'three';
 import { CarModel, type CarVisualMotionState } from '@/components/canvas/CarModel';
 import { PredictiveBrakingLine } from '@/components/canvas/PredictiveBrakingLine';
 import {
+  buildLiveGridStandings,
   livePlayerProgress,
+  liveRivalGridState,
   liveRivalState,
 } from '@/components/canvas/RivalCar';
 import {
@@ -383,26 +385,56 @@ export function PhysicsCar() {
 
     vis.brakeIntensity = brake;
 
-    // 2. Cálculo de Rebufo Aerodinámico tras el Rival IA (solo en Modo VS IA)
+    // 2. Cálculo de Rebufo Aerodinámico (+8% punta) y Colisión Física de Carril contra la Parrilla IA
     const playerTotalDist =
       (sim.lapCount - 1) * trackLengthM + sim.distanceM;
     livePlayerProgress.distanceM = sim.distanceM;
     livePlayerProgress.lapCount = sim.lapCount;
     livePlayerProgress.totalDistanceM = playerTotalDist;
+    livePlayerProgress.lane = playerLane;
+    livePlayerProgress.lateralOffsetM = sim.lateralOffsetM;
+    livePlayerProgress.isDerailed = sim.isDerailed;
 
-    let distBehindRivalOnLoop =
-      (liveRivalState.distanceM - sim.distanceM + trackLengthM) % trackLengthM;
-    if (distBehindRivalOnLoop > trackLengthM * 0.5) {
-      distBehindRivalOnLoop -= trackLengthM;
+    const hasAiInRace =
+      telemetryState.raceMode === 'vs-ai' ||
+      telemetryState.raceMode === 'grand-prix' ||
+      telemetryState.raceMode === 'championship';
+
+    let isSlipstreaming = false;
+
+    if (hasAiInRace && !isWaitingAtGrid && !sim.isDerailed) {
+      for (const unit of liveRivalGridState) {
+        if (!unit.active || unit.isDerailed) continue;
+        let distBehindUnit =
+          (unit.distanceM - sim.distanceM + trackLengthM) % trackLengthM;
+        if (distBehindUnit > trackLengthM * 0.5) {
+          distBehindUnit -= trackLengthM;
+        }
+        const lateralDiff = Math.abs(sim.lateralOffsetM - unit.lateralOffsetM);
+
+        // Rebufo aerodinámico: ir pegado detrás (2.1 m a 18 m) en el mismo carril reduce drag y da +8% velocidad punta
+        if (
+          sim.speedMs > 10 &&
+          distBehindUnit >= 2.1 &&
+          distBehindUnit <= 18.0 &&
+          lateralDiff < 0.65
+        ) {
+          isSlipstreaming = true;
+        }
+
+        // Colisión física de carril (Bumper-to-Bumper): si alcanzas a un coche IA por detrás sin cambiar de carril ([L])
+        if (
+          distBehindUnit > 0.25 &&
+          distBehindUnit < 2.1 &&
+          lateralDiff < 0.45 &&
+          sim.speedMs > unit.speedMs
+        ) {
+          sim.speedMs = Math.max(0, unit.speedMs * 0.96);
+          unit.speedMs = Math.min(unit.speedMs + 1.35, 62);
+          sim.guideStress = Math.min(0.92, sim.guideStress + 0.14);
+        }
+      }
     }
-
-    const isSlipstreaming =
-      telemetryState.raceMode === 'vs-ai' &&
-      !isWaitingAtGrid &&
-      !sim.isDerailed &&
-      sim.speedMs > 11 &&
-      distBehindRivalOnLoop > 1.8 &&
-      distBehindRivalOnLoop < 15.0;
 
     if (isSlipstreaming && !isOverVoltActive) {
       sim.overVoltCharge = Math.min(1, sim.overVoltCharge + 0.16 * dt);
@@ -410,7 +442,7 @@ export function PhysicsCar() {
 
     const baseMaxSpeedMs = carStats.MaxSpeed / 3.6;
     const maxSpeedMultiplier =
-      (isOverVoltActive ? 1.12 : 1.0) * (isSlipstreaming ? 1.05 : 1.0);
+      (isOverVoltActive ? 1.12 : 1.0) * (isSlipstreaming ? 1.08 : 1.0);
     const maxSpeedMs = baseMaxSpeedMs * maxSpeedMultiplier;
 
     // 3. CAJA DE CAMBIOS SECUENCIAL DE 6 VELOCIDADES Y CURVA REAL DE RPM
@@ -627,11 +659,28 @@ export function PhysicsCar() {
           }
 
           if (
-            telemetryState.raceMode === 'vs-ai' &&
+            telemetryState.raceMode === 'license-school' &&
+            telemetryState.cupStartPhase !== 'finished'
+          ) {
+            telemetryState.completeLicenseAttempt(
+              sim.lapTimeMs,
+              sim.derailCountInLap > 0
+            );
+            soundEngine.playPerfectLapFanfare();
+          } else if (
+            (telemetryState.raceMode === 'vs-ai' ||
+              telemetryState.raceMode === 'grand-prix' ||
+              telemetryState.raceMode === 'championship') &&
             telemetryState.cupStartPhase !== 'finished' &&
             sim.lapCount >= telemetryState.cupTargetLaps
           ) {
-            telemetryState.finishCupRace('player');
+            livePlayerProgress.lapCount = sim.lapCount + 1;
+            livePlayerProgress.distanceM =
+              ((nextDistance % trackLengthM) + trackLengthM) % trackLengthM;
+            livePlayerProgress.totalDistanceM =
+              sim.lapCount * trackLengthM + livePlayerProgress.distanceM;
+            const finalStandings = buildLiveGridStandings();
+            telemetryState.finishGridRace(finalStandings);
             soundEngine.playPerfectLapFanfare();
           } else if (summary.medal === 'perfect') {
             soundEngine.playPerfectLapFanfare();
@@ -833,6 +882,12 @@ export function PhysicsCar() {
         vis.driftIntensity = 1.0;
         setIsDerailedVisual(true);
         soundEngine.playDerailSound();
+        if (
+          telemetryState.raceMode === 'license-school' &&
+          telemetryState.cupStartPhase !== 'finished'
+        ) {
+          telemetryState.completeLicenseAttempt(sim.lapTimeMs, true);
+        }
         forceImmediateHudSync = true;
       } else {
         carGroup.position.copy(_laneWorldPos);
@@ -1227,8 +1282,17 @@ export function PhysicsCar() {
       const driftDeg = Math.abs(THREE.MathUtils.radToDeg(vis.driftYawRad));
       const updatedPlayerTotal =
         (sim.lapCount - 1) * trackLengthM + sim.distanceM;
+      livePlayerProgress.distanceM = sim.distanceM;
+      livePlayerProgress.lapCount = sim.lapCount;
+      livePlayerProgress.totalDistanceM = updatedPlayerTotal;
+      livePlayerProgress.lane = playerLane;
+      livePlayerProgress.lateralOffsetM = sim.lateralOffsetM;
+      livePlayerProgress.isDerailed = sim.isDerailed;
+
+      const standings = buildLiveGridStandings();
+      const playerRow = standings.find((r) => r.isPlayer);
+      const playerRacePosition: 1 | 2 | 3 | 4 = playerRow?.position ?? 1;
       const gapToRivalM = updatedPlayerTotal - liveRivalState.totalDistanceM;
-      const playerRacePosition: 1 | 2 = gapToRivalM >= -0.2 ? 1 : 2;
       const lateralG =
         carStats.TotalWeight > 0
           ? currentCentrifugalForceN / (carStats.TotalWeight * GRAVITY_MS2)
@@ -1265,6 +1329,7 @@ export function PhysicsCar() {
         gapToRivalM,
         playerRacePosition,
         rivalLapCount: liveRivalState.lapCount,
+        liveGridStandings: standings,
         tireTempsC: [
           Math.round(sim.tireTempsC[0]),
           Math.round(sim.tireTempsC[1]),

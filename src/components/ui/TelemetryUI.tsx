@@ -6,8 +6,18 @@ import { GaragePanel } from '@/components/ui/GaragePanel';
 import { setPointerBrake, setPointerThrottle } from '@/hooks/useControls';
 import { CIRCUITS } from '@/lib/montmeloSpline';
 import { soundEngine } from '@/lib/soundEngine';
-import { useGarageStore, useTelemetryStore } from '@/store/store';
-import type { LapMedalGrade, SectorColor, TrackId } from '@/types/types';
+import {
+  CHAMPIONSHIP_TRACK_ORDER,
+  LICENSE_CHALLENGES,
+  useGarageStore,
+  useTelemetryStore,
+} from '@/store/store';
+import type {
+  LapMedalGrade,
+  LicenseMedalGrade,
+  SectorColor,
+  TrackId,
+} from '@/types/types';
 
 function formatLapTime(ms: number): string {
   const totalSeconds = ms / 1000;
@@ -85,13 +95,26 @@ function getTireTempClasses(tempC: number): string {
   return 'border-[#E63946] bg-[#E63946]/30 text-red-100';
 }
 
+function getLicenseMedalEmoji(medal: LicenseMedalGrade): string {
+  switch (medal) {
+    case 'gold':
+      return '🥇';
+    case 'silver':
+      return '🥈';
+    case 'bronze':
+      return '🥉';
+    default:
+      return '·';
+  }
+}
+
 const SHIFT_LIGHT_COUNT = 12;
 
 /**
- * HUD Motorsport v3.0:
- * - Selector directo de los 2 Modos de Juego: Contrarreloj (Solo) y Modo VS IA (Con coche IA).
- * - Semáforo F1 de 5 Focos (Rojo 1..5 -> ¡VERDE SALIDA!) siempre funcional.
- * - Cuadro digital GT3/F1 con Tira LED de RPM, Marcha engranada (N, 1ª–6ª), Fuerzas G y Grip.
+ * HUD Motorsport v3.2:
+ * - Selector de los 5 Modos Single-Player: Contrarreloj, Duelo 1vs1, Gran Premio (4 Coches), Escuela de Licencias y Campeonato FIA.
+ * - Tabla de clasificación en vivo P1-P4 con distancias y carril de cada rival.
+ * - Semáforo F1 de 5 Focos (Rojo 1..5 -> ¡VERDE SALIDA!) + Cuadro digital GT3/F1.
  */
 export function TelemetryUI() {
   const trackId = useTelemetryStore((s) => s.trackId);
@@ -109,10 +132,25 @@ export function TelemetryUI() {
   );
 
   const raceMode = useTelemetryStore((s) => s.raceMode);
+  const totalCarsInRace = useTelemetryStore((s) => s.totalCarsInRace);
+  const liveGridStandings = useTelemetryStore((s) => s.liveGridStandings);
   const cupStartPhase = useTelemetryStore((s) => s.cupStartPhase);
   const countdownLights = useTelemetryStore((s) => s.countdownLights);
   const cupTargetLaps = useTelemetryStore((s) => s.cupTargetLaps);
-  const cupWinner = useTelemetryStore((s) => s.cupWinner);
+  const cupRewardGp = useTelemetryStore((s) => s.cupRewardGp);
+
+  const activeLicenseId = useTelemetryStore((s) => s.activeLicenseId);
+  const licenseProgress = useTelemetryStore((s) => s.licenseProgress);
+  const lastLicenseResult = useTelemetryStore((s) => s.lastLicenseResult);
+  const championshipRoundIndex = useTelemetryStore(
+    (s) => s.championshipRoundIndex
+  );
+  const championshipCompleted = useTelemetryStore(
+    (s) => s.championshipCompleted
+  );
+  const championshipStandings = useTelemetryStore(
+    (s) => s.championshipStandings
+  );
 
   const speedKmh = useTelemetryStore((s) => s.speedKmh);
   const gear = useTelemetryStore((s) => s.gear);
@@ -148,6 +186,13 @@ export function TelemetryUI() {
 
   const setTrackId = useTelemetryStore((s) => s.setTrackId);
   const setRaceMode = useTelemetryStore((s) => s.setRaceMode);
+  const selectLicenseChallenge = useTelemetryStore(
+    (s) => s.selectLicenseChallenge
+  );
+  const advanceChampionshipRound = useTelemetryStore(
+    (s) => s.advanceChampionshipRound
+  );
+  const restartChampionship = useTelemetryStore((s) => s.restartChampionship);
   const toggleMagnetMode = useTelemetryStore((s) => s.toggleMagnetMode);
   const toggleWeatherMode = useTelemetryStore((s) => s.toggleWeatherMode);
   const togglePlayerLane = useTelemetryStore((s) => s.togglePlayerLane);
@@ -166,6 +211,13 @@ export function TelemetryUI() {
   const activeTireId = useGarageStore((s) => s.loadout.tiresId);
 
   const boss = CUP_BOSS_BY_TRACK[trackId];
+  const activeLicense =
+    LICENSE_CHALLENGES.find((c) => c.id === activeLicenseId) ??
+    LICENSE_CHALLENGES[0];
+  const isAiRaceMode =
+    raceMode === 'vs-ai' ||
+    raceMode === 'grand-prix' ||
+    raceMode === 'championship';
 
   const [visibleSummaryTs, setVisibleSummaryTs] = useState<number | null>(null);
 
@@ -242,153 +294,290 @@ export function TelemetryUI() {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-20 flex flex-col justify-between p-3 sm:p-5 select-none">
-      {/* HEADER UNIFICADO: 2 Modos de Juego (Contrarreloj / Modo VS IA) + 3 Circuitos + Crono | Controles + Garaje */}
+      {/* HEADER UNIFICADO: 5 Modos Single-Player + Selector Contextual (Circuitos / Licencias / Campeonato) + Crono | Controles + Garaje */}
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="pointer-events-auto flex flex-wrap items-center gap-3 rounded-md border border-slate-800 bg-[#151B24]/92 px-3.5 py-2 backdrop-blur-md">
-          {/* Selector principal de los 2 Modos de Juego */}
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-1.5 rounded-xs border border-slate-700/80 bg-[#0D1117] p-1">
-              <button
-                type="button"
-                onClick={() => {
-                  soundEngine.unlock();
-                  setRaceMode('time-trial');
-                }}
-                className={`rounded-xs px-3 py-1 font-display text-xs font-bold transition-colors ${
-                  raceMode === 'time-trial'
-                    ? 'bg-[#2F81F7] text-white'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                ⏱️ Contrarreloj
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  soundEngine.unlock();
-                  setRaceMode('vs-ai');
-                }}
-                className={`rounded-xs px-3 py-1 font-display text-xs font-bold transition-colors ${
-                  raceMode === 'vs-ai'
-                    ? 'bg-[#E63946] text-white'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                🏁 Modo VS IA
-              </button>
-            </div>
+        <div className="flex flex-col gap-2">
+          <div className="pointer-events-auto flex flex-wrap items-center gap-3 rounded-md border border-slate-800 bg-[#151B24]/92 px-3.5 py-2 backdrop-blur-md">
+            {/* Selector principal de los 5 Modos de Juego */}
+            <div className="flex flex-col gap-1.5">
+              <div className="flex flex-wrap items-center gap-1 rounded-xs border border-slate-700/80 bg-[#0D1117] p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundEngine.unlock();
+                    setRaceMode('time-trial');
+                  }}
+                  className={`rounded-xs px-2.5 py-1 font-display text-xs font-bold transition-colors ${
+                    raceMode === 'time-trial'
+                      ? 'bg-[#2F81F7] text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  ⏱️ Contrarreloj
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundEngine.unlock();
+                    setRaceMode('vs-ai');
+                  }}
+                  className={`rounded-xs px-2.5 py-1 font-display text-xs font-bold transition-colors ${
+                    raceMode === 'vs-ai'
+                      ? 'bg-[#E63946] text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  🏁 Duelo 1vs1
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundEngine.unlock();
+                    setRaceMode('grand-prix');
+                  }}
+                  className={`rounded-xs px-2.5 py-1 font-display text-xs font-bold transition-colors ${
+                    raceMode === 'grand-prix'
+                      ? 'bg-emerald-500 text-slate-950'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  🏎️ Gran Premio (4)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundEngine.unlock();
+                    setRaceMode('license-school');
+                  }}
+                  className={`rounded-xs px-2.5 py-1 font-display text-xs font-bold transition-colors ${
+                    raceMode === 'license-school'
+                      ? 'bg-purple-500 text-white'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  🎓 Licencias FIA
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundEngine.unlock();
+                    setRaceMode('championship');
+                  }}
+                  className={`rounded-xs px-2.5 py-1 font-display text-xs font-bold transition-colors ${
+                    raceMode === 'championship'
+                      ? 'bg-[#F59E0B] text-slate-950'
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  🏆 Campeonato
+                </button>
+              </div>
 
-            {/* Selector de los 3 Circuitos */}
-            <div className="flex flex-wrap items-center gap-1">
-              {(Object.keys(CIRCUITS) as TrackId[]).map((id) => {
-                const active = id === trackId;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => {
-                      soundEngine.unlock();
-                      setTrackId(id);
-                    }}
-                    className={`rounded-xs px-2 py-0.5 font-display text-[11px] font-bold transition-colors ${
-                      active
-                        ? 'bg-slate-200 text-slate-950'
-                        : 'bg-[#0D1117]/80 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {CIRCUITS[id].name}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="hidden h-12 w-px bg-slate-800 sm:block" />
-
-          {/* Cronometraje oficial + Posición VS IA + Sectores F1 */}
-          <div>
-            <div className="flex gap-3.5 font-mono text-xs tabular-nums">
-              {raceMode === 'vs-ai' && (
-                <div>
-                  <span className="block text-[10px] text-slate-400">
-                    Posición
-                  </span>
-                  <span
-                    className={`text-sm font-bold ${
-                      playerRacePosition === 1
-                        ? 'text-emerald-400'
-                        : 'text-[#F59E0B]'
-                    }`}
-                  >
-                    {playerRacePosition}.º / 2
+              {/* Sub-barra contextual según Modo de Juego */}
+              {raceMode === 'license-school' ? (
+                <div className="flex flex-wrap items-center gap-1">
+                  {LICENSE_CHALLENGES.map((lic) => {
+                    const active = lic.id === activeLicense.id;
+                    const rec = licenseProgress[lic.id];
+                    return (
+                      <button
+                        key={lic.id}
+                        type="button"
+                        onClick={() => {
+                          soundEngine.unlock();
+                          selectLicenseChallenge(lic.id);
+                        }}
+                        title={`${lic.code}: ${lic.title} (${lic.subtitle})`}
+                        className={`rounded-xs px-2 py-0.5 font-mono text-[11px] font-bold transition-colors ${
+                          active
+                            ? 'bg-purple-400 text-slate-950'
+                            : 'bg-[#0D1117]/80 text-slate-300 hover:text-white'
+                        }`}
+                      >
+                        {lic.code} {getLicenseMedalEmoji(rec?.medal ?? 'none')}
+                      </button>
+                    );
+                  })}
+                  <span className="ml-1.5 font-mono text-[10px] text-purple-200">
+                    🥇 {(activeLicense.goldMs / 1000).toFixed(2)}s · 🥈{' '}
+                    {(activeLicense.silverMs / 1000).toFixed(2)}s · 🥉{' '}
+                    {(activeLicense.bronzeMs / 1000).toFixed(2)}s
                   </span>
                 </div>
-              )}
-              <div>
-                <span className="block text-[10px] text-slate-400">Vuelta</span>
-                <span className="text-sm font-semibold text-[#F0F4F8]">
-                  {raceMode === 'vs-ai'
-                    ? `${Math.min(lapCount, cupTargetLaps)}/${cupTargetLaps}`
-                    : lapCount}
-                </span>
-              </div>
-              <div>
-                <span className="block text-[10px] text-slate-400">Crono</span>
-                <span className="text-sm font-semibold text-[#F0F4F8]">
-                  {formatLapTime(currentLapTimeMs)}
-                </span>
-              </div>
-              {raceMode === 'vs-ai' ? (
-                <div>
-                  <span className="block text-[10px] text-slate-400">
-                    vs {boss.name.split(' · ')[0]}
-                  </span>
-                  <span
-                    className={`text-sm font-bold ${
-                      gapToRivalM >= 0 ? 'text-emerald-400' : 'text-[#E63946]'
-                    }`}
-                  >
-                    {gapDisplay}
-                  </span>
+              ) : raceMode === 'championship' ? (
+                <div className="flex flex-wrap items-center gap-2 font-mono text-[11px]">
+                  {CHAMPIONSHIP_TRACK_ORDER.map((tId, idx) => {
+                    const isCurrent = idx === championshipRoundIndex;
+                    const isPast = idx < championshipRoundIndex;
+                    return (
+                      <span
+                        key={tId}
+                        className={`rounded-xs px-2 py-0.5 font-bold ${
+                          isCurrent
+                            ? 'bg-[#F59E0B] text-slate-950'
+                            : isPast
+                              ? 'bg-emerald-500/20 text-emerald-300'
+                              : 'bg-[#0D1117]/80 text-slate-400'
+                        }`}
+                      >
+                        R{idx + 1}: {CIRCUITS[tId].name}
+                      </span>
+                    );
+                  })}
                 </div>
               ) : (
-                lastLapTimeMs !== null && (
-                  <div>
-                    <span className="block text-[10px] text-slate-400">
-                      Última
-                    </span>
-                    <span className="text-sm font-semibold text-slate-300">
-                      {formatLapTime(lastLapTimeMs)}
-                    </span>
-                  </div>
-                )
+                <div className="flex flex-wrap items-center gap-1">
+                  {(Object.keys(CIRCUITS) as TrackId[]).map((id) => {
+                    const active = id === trackId;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => {
+                          soundEngine.unlock();
+                          setTrackId(id);
+                        }}
+                        className={`rounded-xs px-2 py-0.5 font-display text-[11px] font-bold transition-colors ${
+                          active
+                            ? 'bg-slate-200 text-slate-950'
+                            : 'bg-[#0D1117]/80 text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {CIRCUITS[id].name}
+                      </button>
+                    );
+                  })}
+                </div>
               )}
-              <div>
-                <span className="block text-[10px] text-slate-400">Récord</span>
-                <span className="text-sm font-bold text-[#F59E0B]">
-                  {bestLapTimeMs !== null
-                    ? formatLapTime(bestLapTimeMs)
-                    : '--:--.---'}
-                </span>
-              </div>
             </div>
 
-            <div className="mt-1.5 flex items-center gap-1.5 font-mono text-[10px] tabular-nums">
-              {(['S1', 'S2', 'S3'] as const).map((label, idx) => {
-                const split = currentSectors[idx];
-                return (
-                  <span
-                    key={label}
-                    className={`rounded-xs border px-1.5 py-0.5 font-semibold transition-colors ${getSectorBadgeClasses(
-                      split.color
-                    )}`}
-                  >
-                    {label} {formatSectorSeconds(split.timeMs)}
+            <div className="hidden h-12 w-px bg-slate-800 sm:block" />
+
+            {/* Cronometraje oficial + Posición + Sectores F1 */}
+            <div>
+              <div className="flex gap-3.5 font-mono text-xs tabular-nums">
+                {isAiRaceMode && (
+                  <div>
+                    <span className="block text-[10px] text-slate-400">
+                      Posición
+                    </span>
+                    <span
+                      className={`text-sm font-bold ${
+                        playerRacePosition === 1
+                          ? 'text-emerald-400'
+                          : 'text-[#F59E0B]'
+                      }`}
+                    >
+                      P{playerRacePosition} / {totalCarsInRace}
+                    </span>
+                  </div>
+                )}
+                <div>
+                  <span className="block text-[10px] text-slate-400">
+                    Vuelta
                   </span>
-                );
-              })}
+                  <span className="text-sm font-semibold text-[#F0F4F8]">
+                    {raceMode === 'time-trial'
+                      ? lapCount
+                      : `${Math.min(lapCount, cupTargetLaps)}/${cupTargetLaps}`}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[10px] text-slate-400">
+                    Crono
+                  </span>
+                  <span className="text-sm font-semibold text-[#F0F4F8]">
+                    {formatLapTime(currentLapTimeMs)}
+                  </span>
+                </div>
+                {isAiRaceMode ? (
+                  <div>
+                    <span className="block text-[10px] text-slate-400">
+                      Gap Líder
+                    </span>
+                    <span
+                      className={`text-sm font-bold ${
+                        gapToRivalM >= 0 ? 'text-emerald-400' : 'text-[#E63946]'
+                      }`}
+                    >
+                      {gapDisplay}
+                    </span>
+                  </div>
+                ) : (
+                  lastLapTimeMs !== null && (
+                    <div>
+                      <span className="block text-[10px] text-slate-400">
+                        Última
+                      </span>
+                      <span className="text-sm font-semibold text-slate-300">
+                        {formatLapTime(lastLapTimeMs)}
+                      </span>
+                    </div>
+                  )
+                )}
+                <div>
+                  <span className="block text-[10px] text-slate-400">
+                    {raceMode === 'license-school' ? 'Oro FIA' : 'Récord'}
+                  </span>
+                  <span className="text-sm font-bold text-[#F59E0B]">
+                    {raceMode === 'license-school'
+                      ? formatLapTime(activeLicense.goldMs)
+                      : bestLapTimeMs !== null
+                        ? formatLapTime(bestLapTimeMs)
+                        : '--:--.---'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-1.5 flex items-center gap-1.5 font-mono text-[10px] tabular-nums">
+                {(['S1', 'S2', 'S3'] as const).map((label, idx) => {
+                  const split = currentSectors[idx];
+                  return (
+                    <span
+                      key={label}
+                      className={`rounded-xs border px-1.5 py-0.5 font-semibold transition-colors ${getSectorBadgeClasses(
+                        split.color
+                      )}`}
+                    >
+                      {label} {formatSectorSeconds(split.timeMs)}
+                    </span>
+                  );
+                })}
+              </div>
             </div>
           </div>
+
+          {/* Tabla en vivo de Parrilla (P1-P4) con Carril de cada coche para planificar Rebufo y Adelantamientos */}
+          {isAiRaceMode && liveGridStandings.length > 0 && (
+            <div className="pointer-events-auto flex flex-wrap items-center gap-1.5 rounded-md border border-slate-800 bg-[#0D1117]/90 px-3 py-1.5 font-mono text-[11px] tabular-nums backdrop-blur-md">
+              <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+                Parrilla:
+              </span>
+              {liveGridStandings.map((row) => (
+                <div
+                  key={row.driverId}
+                  className={`flex items-center gap-1.5 rounded-xs border px-2 py-0.5 ${
+                    row.isPlayer
+                      ? 'border-emerald-400/80 bg-emerald-500/20 text-emerald-100 font-bold'
+                      : 'border-slate-800 bg-[#151B24] text-slate-300'
+                  }`}
+                >
+                  <span className="text-amber-300 font-bold">
+                    P{row.position}
+                  </span>
+                  <span>{row.name.split(' · ')[0]}</span>
+                  <span className="rounded-xs bg-slate-800 px-1 text-[9px] text-slate-300">
+                    {row.lane === 'left' ? 'IZQ' : 'DER'}
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    {row.position === 1
+                      ? 'LÍDER'
+                      : `-${row.gapToLeaderM.toFixed(1)}m`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Bloque Derecho: Controles de Pista + Salida Semáforo + Garaje Pro */}
@@ -403,7 +592,9 @@ export function TelemetryUI() {
               title="Volver a la parrilla de salida y activar el Semáforo F1 (o reencarrilar si saliste de pista) [Tecla R]"
               className="rounded-xs border border-amber-500/60 bg-amber-500/15 px-2.5 py-1.5 text-xs font-bold text-amber-200 transition-colors hover:bg-amber-500/25"
             >
-              {isDerailed ? 'Reencarrilar [R]' : '🚦 Salida Semáforo [R]'}
+              {isDerailed && raceMode !== 'license-school'
+                ? 'Reencarrilar [R]'
+                : '🚦 Salida Semáforo [R]'}
             </button>
 
             <button
@@ -506,14 +697,20 @@ export function TelemetryUI() {
         </div>
       </header>
 
-      {/* ZONA CENTRAL: SEMÁFORO OFICIAL F1 (5 Focos Rojos -> ¡VERDE SALIDA!), Final VS IA o Avisos */}
+      {/* ZONA CENTRAL: SEMÁFORO OFICIAL F1 (5 Focos Rojos -> ¡VERDE SALIDA!), Modales de Final de Carrera / Licencias / Campeonato */}
       <div className="mx-auto flex flex-col items-center gap-2">
         {(cupStartPhase === 'countdown' || cupStartPhase === 'green') && (
           <div className="rounded-md border-2 border-slate-700 bg-[#0D1117]/95 px-7 py-4 text-center shadow-2xl backdrop-blur-md">
             <span className="font-mono text-[11px] font-bold tracking-wider text-slate-300 uppercase">
-              {raceMode === 'vs-ai'
-                ? `🏁 MODO VS IA · ${boss.cupTitle} vs ${boss.name}`
-                : `⏱️ CONTRARRELOJ · ${CIRCUITS[trackId].name}`}
+              {raceMode === 'license-school'
+                ? `🎓 LICENCIA FIA ${activeLicense.code} · ${activeLicense.title} (${activeLicense.subtitle})`
+                : raceMode === 'championship'
+                  ? `🏆 CAMPEONATO FIA · RONDA ${championshipRoundIndex + 1}/3 · ${CIRCUITS[trackId].name} (Parrilla 4 Coches)`
+                  : raceMode === 'grand-prix'
+                    ? `🏎️ GRAN PREMIO 4 COCHES · ${CIRCUITS[trackId].name} · 3 Vueltas`
+                    : raceMode === 'vs-ai'
+                      ? `🏁 DUELO 1vs1 · ${boss.cupTitle} vs ${boss.name}`
+                      : `⏱️ CONTRARRELOJ · ${CIRCUITS[trackId].name}`}
             </span>
 
             {/* 5 Focos del Semáforo F1 */}
@@ -554,39 +751,181 @@ export function TelemetryUI() {
           </div>
         )}
 
-        {/* Modal de Final de Carrera en Modo VS IA */}
-        {raceMode === 'vs-ai' && cupStartPhase === 'finished' && (
+        {/* Modal de Final de Examen en Escuela de Licencias FIA */}
+        {raceMode === 'license-school' &&
+          cupStartPhase === 'finished' &&
+          lastLicenseResult && (
+            <div className="pointer-events-auto max-w-md rounded-md border-2 border-purple-400 bg-[#151B24]/97 px-6 py-4 text-center shadow-2xl backdrop-blur-md">
+              <span className="inline-block rounded-xs bg-purple-500 px-2.5 py-0.5 font-mono text-xs font-bold text-white">
+                🎓 LICENCIA FIA {activeLicense.code} · {activeLicense.title}
+              </span>
+              <p className="mt-2 font-display text-xl font-bold text-[#F0F4F8]">
+                {lastLicenseResult.failedByDerail
+                  ? '❌ PRUEBA SUSPENDIDA (SALIDA DE CARRIL)'
+                  : lastLicenseResult.medal === 'gold'
+                    ? '🥇 ¡MEDALLA DE ORO FIA!'
+                    : lastLicenseResult.medal === 'silver'
+                      ? '🥈 ¡MEDALLA DE PLATA FIA!'
+                      : lastLicenseResult.medal === 'bronze'
+                        ? '🥉 ¡MEDALLA DE BRONCE FIA!'
+                        : '⏱️ FUERA DE TIEMPO DE MEDALLA'}
+              </p>
+              {!lastLicenseResult.failedByDerail && (
+                <p className="mt-1 font-mono text-lg font-bold text-amber-300 tabular-nums">
+                  Tiempo: {formatLapTime(lastLicenseResult.timeMs)}
+                </p>
+              )}
+              <p className="mt-1 font-mono text-xs text-slate-300">
+                Objetivos: 🥇 {formatLapTime(activeLicense.goldMs)} · 🥈{' '}
+                {formatLapTime(activeLicense.silverMs)} · 🥉{' '}
+                {formatLapTime(activeLicense.bronzeMs)}
+              </p>
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => selectLicenseChallenge(activeLicense.id)}
+                  className="rounded-xs bg-purple-500 px-3.5 py-1.5 font-display text-xs font-bold text-white hover:bg-purple-400"
+                >
+                  Reintentar Licencia [R]
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const curIdx = LICENSE_CHALLENGES.findIndex(
+                      (c) => c.id === activeLicense.id
+                    );
+                    const nextLic =
+                      LICENSE_CHALLENGES[
+                        (curIdx + 1) % LICENSE_CHALLENGES.length
+                      ];
+                    selectLicenseChallenge(nextLic.id);
+                  }}
+                  className="rounded-xs border border-slate-600 bg-[#0D1117] px-3.5 py-1.5 font-display text-xs font-semibold text-slate-200 hover:border-purple-400"
+                >
+                  Siguiente Licencia →
+                </button>
+              </div>
+            </div>
+          )}
+
+        {/* Modal de Final de Carrera en Duelo 1vs1, Gran Premio 4-Grid o Ronda de Campeonato FIA */}
+        {isAiRaceMode && cupStartPhase === 'finished' && (
           <div
-            className={`pointer-events-auto max-w-md rounded-md border-2 px-6 py-4 text-center shadow-2xl backdrop-blur-md ${
-              cupWinner === 'player'
+            className={`pointer-events-auto w-full max-w-lg rounded-md border-2 px-6 py-4 text-center shadow-2xl backdrop-blur-md ${
+              playerRacePosition === 1
                 ? 'border-emerald-400 bg-[#151B24]/97'
                 : 'border-slate-600 bg-[#151B24]/97'
             }`}
           >
             <span
               className={`inline-block rounded-xs px-2.5 py-0.5 font-mono text-xs font-bold ${
-                cupWinner === 'player'
+                playerRacePosition === 1
                   ? 'bg-emerald-500 text-slate-950'
-                  : 'bg-slate-700 text-slate-200'
+                  : 'bg-amber-500 text-slate-950'
               }`}
             >
-              {cupWinner === 'player'
-                ? '🏆 ¡VICTORIA EN MODO VS IA!'
-                : '2.ª POSICIÓN FINAL'}
+              {raceMode === 'championship'
+                ? championshipCompleted
+                  ? '🏆 ¡FINAL DEL CAMPEONATO MUNDIAL FIA!'
+                  : `🏆 RONDA ${championshipRoundIndex + 1}/3 COMPLETADA · P${playerRacePosition}`
+                : playerRacePosition === 1
+                  ? '🏆 ¡VICTORIA EN GRAN PREMIO!'
+                  : `🏁 ${playerRacePosition}.ª POSICIÓN FINAL (+${cupRewardGp} GP)`}
             </span>
+
             <p className="mt-2 font-display text-xl font-bold text-[#F0F4F8]">
-              {cupWinner === 'player'
-                ? `¡Ganaste el duelo contra ${boss.name}!`
-                : `${boss.name} cruzó la línea de meta primero`}
+              {raceMode === 'championship' && championshipCompleted
+                ? championshipStandings[0]?.isPlayer
+                  ? '¡ERES EL CAMPEÓN DEL MUNDO FIA SLOT!'
+                  : `Campeón FIA: ${championshipStandings[0]?.name}`
+                : playerRacePosition === 1
+                  ? `¡Cruzaste la meta en P1 en ${CIRCUITS[trackId].name}!`
+                  : `Finalizaste P${playerRacePosition} de ${totalCarsInRace} coches en pista`}
             </p>
-            <div className="mt-3 flex items-center justify-center gap-2.5">
-              <button
-                type="button"
-                onClick={() => setRaceMode('vs-ai')}
-                className="rounded-xs bg-[#E63946] px-3.5 py-1.5 font-display text-xs font-bold text-white hover:bg-red-500"
-              >
-                Repetir Carrera VS IA
-              </button>
+
+            {/* Tabla de Clasificación de la Carrera o General del Campeonato FIA */}
+            <div className="mt-3 rounded-xs border border-slate-800 bg-[#0D1117]/90 p-2.5 text-left font-mono text-xs">
+              <div className="mb-1.5 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+                {raceMode === 'championship'
+                  ? 'Clasificación General del Campeonato FIA (Puntos 25-18-15-12)'
+                  : 'Clasificación Oficial en Meta'}
+              </div>
+              {raceMode === 'championship'
+                ? championshipStandings.map((row, idx) => (
+                    <div
+                      key={row.driverId}
+                      className={`flex items-center justify-between py-1 ${
+                        row.isPlayer
+                          ? 'text-emerald-300 font-bold'
+                          : 'text-slate-300'
+                      }`}
+                    >
+                      <span>
+                        {idx + 1}.º {row.name}
+                      </span>
+                      <span>
+                        {row.points} PTS ({row.wins}{' '}
+                        {row.wins === 1 ? 'victoria' : 'victorias'})
+                      </span>
+                    </div>
+                  ))
+                : liveGridStandings.map((row) => (
+                    <div
+                      key={row.driverId}
+                      className={`flex items-center justify-between py-1 ${
+                        row.isPlayer
+                          ? 'text-emerald-300 font-bold'
+                          : 'text-slate-300'
+                      }`}
+                    >
+                      <span>
+                        P{row.position} · {row.name}
+                      </span>
+                      <span>
+                        {row.position === 1
+                          ? 'GANADOR'
+                          : `+${row.gapToLeaderM.toFixed(1)} m`}
+                      </span>
+                    </div>
+                  ))}
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-2.5">
+              {raceMode === 'championship' ? (
+                !championshipCompleted ? (
+                  <button
+                    type="button"
+                    onClick={advanceChampionshipRound}
+                    className="rounded-xs bg-[#F59E0B] px-4 py-1.5 font-display text-xs font-bold text-slate-950 hover:bg-amber-400"
+                  >
+                    Siguiente Ronda (R{championshipRoundIndex + 2}/3:{' '}
+                    {
+                      CIRCUITS[
+                        CHAMPIONSHIP_TRACK_ORDER[
+                          Math.min(2, championshipRoundIndex + 1)
+                        ]
+                      ].name
+                    }
+                    ) →
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={restartChampionship}
+                    className="rounded-xs bg-[#F59E0B] px-4 py-1.5 font-display text-xs font-bold text-slate-950 hover:bg-amber-400"
+                  >
+                    Iniciar Nuevo Campeonato FIA
+                  </button>
+                )
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setRaceMode(raceMode)}
+                  className="rounded-xs bg-emerald-500 px-3.5 py-1.5 font-display text-xs font-bold text-slate-950 hover:bg-emerald-400"
+                >
+                  Repetir Carrera
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setRaceMode('time-trial')}
