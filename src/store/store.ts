@@ -43,12 +43,18 @@ const INITIAL_GP_CREDITS = 9999;
 const CUP_VICTORY_PRIZE_BY_TRACK: Record<TrackId, number> = {
   montmelo: 450,
   'sierra-seca': 600,
+  'spa-ardennes': 700,
+  'monaco-harbor': 750,
+  'suzuka-eight': 800,
   'neo-wangan': 850,
 };
 
-export const CHAMPIONSHIP_TRACK_ORDER: readonly [TrackId, TrackId, TrackId] = [
+export const CHAMPIONSHIP_TRACK_ORDER: readonly TrackId[] = [
   'montmelo',
   'sierra-seca',
+  'spa-ardennes',
+  'monaco-harbor',
+  'suzuka-eight',
   'neo-wangan',
 ];
 
@@ -102,28 +108,41 @@ export const LICENSE_CHALLENGES: readonly LicenseChallengeSpec[] = [
   {
     id: 'lic-a2',
     code: 'A-2',
-    title: 'Tormenta en el Puerto',
-    subtitle: 'Control de aquaplaning sobre asfalto mojado en Sierra Seca',
-    trackId: 'sierra-seca',
-    weatherMode: 'rain',
+    title: 'Eau Rouge & Raidillon (Spa)',
+    subtitle: 'Subida a fondo de +16.4 m y recta Kemmel en las Ardenas',
+    trackId: 'spa-ardennes',
+    weatherMode: 'dry',
     magnetMode: 'gt-magnet',
-    goldMs: 22300,
-    silverMs: 24600,
-    bronzeMs: 28200,
+    goldMs: 21200,
+    silverMs: 23500,
+    bronzeMs: 27000,
     rewardGoldGp: 600,
+  },
+  {
+    id: 'lic-a3',
+    code: 'A-3',
+    title: 'Monaco Harbor & Túnel',
+    subtitle: 'Precisión milimétrica en Fairmont Hairpin y el Túnel Marino',
+    trackId: 'monaco-harbor',
+    weatherMode: 'dry',
+    magnetMode: 'gt-magnet',
+    goldMs: 19800,
+    silverMs: 22000,
+    bronzeMs: 25400,
+    rewardGoldGp: 650,
   },
   {
     id: 'lic-s1',
     code: 'S-1',
-    title: 'Expreso Nocturno Wangan C1',
-    subtitle: 'Alta velocidad punta entre muros de hormigón en Tokio',
-    trackId: 'neo-wangan',
+    title: 'Suzuka Figure-8 Crossover',
+    subtitle: 'Esses técnicas enlazadas, puente en 8 y curvón 130R',
+    trackId: 'suzuka-eight',
     weatherMode: 'dry',
     magnetMode: 'gt-magnet',
-    goldMs: 21100,
-    silverMs: 23400,
-    bronzeMs: 26800,
-    rewardGoldGp: 650,
+    goldMs: 22400,
+    silverMs: 24800,
+    bronzeMs: 28400,
+    rewardGoldGp: 750,
   },
   {
     id: 'lic-s2',
@@ -136,7 +155,7 @@ export const LICENSE_CHALLENGES: readonly LicenseChallengeSpec[] = [
     goldMs: 22900,
     silverMs: 25400,
     bronzeMs: 29200,
-    rewardGoldGp: 900,
+    rewardGoldGp: 950,
   },
 ];
 
@@ -424,6 +443,18 @@ const DEFAULT_BEST_LAPS: BestLapsMap = {
   montmelo: null,
   'sierra-seca': null,
   'neo-wangan': null,
+  'spa-ardennes': null,
+  'monaco-harbor': null,
+  'suzuka-eight': null,
+};
+
+const DEFAULT_BEST_SECTORS: BestSectorsMap = {
+  montmelo: [null, null, null],
+  'sierra-seca': [null, null, null],
+  'neo-wangan': [null, null, null],
+  'spa-ardennes': [null, null, null],
+  'monaco-harbor': [null, null, null],
+  'suzuka-eight': [null, null, null],
 };
 
 const EMPTY_SECTOR_SPLITS: readonly [
@@ -442,11 +473,7 @@ function loadPersistedRecords(): PersistedRecordsPayload {
   if (typeof window === 'undefined') {
     return {
       bestLaps: { ...DEFAULT_BEST_LAPS },
-      bestSectors: {
-        montmelo: [null, null, null],
-        'sierra-seca': [null, null, null],
-        'neo-wangan': [null, null, null],
-      },
+      bestSectors: { ...DEFAULT_BEST_SECTORS },
     };
   }
 
@@ -465,25 +492,25 @@ function loadPersistedRecords(): PersistedRecordsPayload {
         ];
       };
 
+      const numOrNull = (val: unknown): number | null =>
+        typeof val === 'number' ? val : null;
+
       return {
         bestLaps: {
-          montmelo:
-            typeof parsed.bestLaps?.montmelo === 'number'
-              ? parsed.bestLaps.montmelo
-              : null,
-          'sierra-seca':
-            typeof parsed.bestLaps?.['sierra-seca'] === 'number'
-              ? parsed.bestLaps['sierra-seca']
-              : null,
-          'neo-wangan':
-            typeof parsed.bestLaps?.['neo-wangan'] === 'number'
-              ? parsed.bestLaps['neo-wangan']
-              : null,
+          montmelo: numOrNull(parsed.bestLaps?.montmelo),
+          'sierra-seca': numOrNull(parsed.bestLaps?.['sierra-seca']),
+          'neo-wangan': numOrNull(parsed.bestLaps?.['neo-wangan']),
+          'spa-ardennes': numOrNull(parsed.bestLaps?.['spa-ardennes']),
+          'monaco-harbor': numOrNull(parsed.bestLaps?.['monaco-harbor']),
+          'suzuka-eight': numOrNull(parsed.bestLaps?.['suzuka-eight']),
         },
         bestSectors: {
           montmelo: sanitizeTuple(parsed.bestSectors?.montmelo),
           'sierra-seca': sanitizeTuple(parsed.bestSectors?.['sierra-seca']),
           'neo-wangan': sanitizeTuple(parsed.bestSectors?.['neo-wangan']),
+          'spa-ardennes': sanitizeTuple(parsed.bestSectors?.['spa-ardennes']),
+          'monaco-harbor': sanitizeTuple(parsed.bestSectors?.['monaco-harbor']),
+          'suzuka-eight': sanitizeTuple(parsed.bestSectors?.['suzuka-eight']),
         },
       };
     }
@@ -493,18 +520,14 @@ function loadPersistedRecords(): PersistedRecordsPayload {
       const legacy = JSON.parse(legacyRaw) as Partial<BestLapsMap>;
       return {
         bestLaps: {
+          ...DEFAULT_BEST_LAPS,
           montmelo: typeof legacy.montmelo === 'number' ? legacy.montmelo : null,
           'sierra-seca':
             typeof legacy['sierra-seca'] === 'number'
               ? legacy['sierra-seca']
               : null,
-          'neo-wangan': null,
         },
-        bestSectors: {
-          montmelo: [null, null, null],
-          'sierra-seca': [null, null, null],
-          'neo-wangan': [null, null, null],
-        },
+        bestSectors: { ...DEFAULT_BEST_SECTORS },
       };
     }
   } catch {
@@ -513,11 +536,7 @@ function loadPersistedRecords(): PersistedRecordsPayload {
 
   return {
     bestLaps: { ...DEFAULT_BEST_LAPS },
-    bestSectors: {
-      montmelo: [null, null, null],
-      'sierra-seca': [null, null, null],
-      'neo-wangan': [null, null, null],
-    },
+    bestSectors: { ...DEFAULT_BEST_SECTORS },
   };
 }
 
@@ -674,11 +693,7 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
     resetNonce: 0,
     ghostVersionNonce: 0,
     bestLapByTrack: { ...DEFAULT_BEST_LAPS },
-    bestSectorsByTrack: {
-      montmelo: [null, null, null],
-      'sierra-seca': [null, null, null],
-      'neo-wangan': [null, null, null],
-    },
+    bestSectorsByTrack: { ...DEFAULT_BEST_SECTORS },
     currentSectors: EMPTY_SECTOR_SPLITS,
     lastLapSummary: null,
 
@@ -1093,7 +1108,8 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
           })
           .sort((a, b) => b.points - a.points || b.wins - a.wins);
 
-        const isFinalRound = state.championshipRoundIndex >= 2;
+        const isFinalRound =
+          state.championshipRoundIndex >= CHAMPIONSHIP_TRACK_ORDER.length - 1;
         if (isFinalRound && updatedChampionship[0]?.isPlayer) {
           useGarageStore.getState().addGpCredits(1500);
         }
@@ -1121,10 +1137,8 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
 
     advanceChampionshipRound: () => {
       const state = get();
-      const nextRound = Math.min(2, state.championshipRoundIndex + 1) as
-        | 0
-        | 1
-        | 2;
+      const maxRoundIdx = CHAMPIONSHIP_TRACK_ORDER.length - 1;
+      const nextRound = Math.min(maxRoundIdx, state.championshipRoundIndex + 1);
       const nextTrack = CHAMPIONSHIP_TRACK_ORDER[nextRound];
       const { bestLaps } = ensureRecordsLoaded();
 

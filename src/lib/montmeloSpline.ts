@@ -161,6 +161,161 @@ export const NEO_WANGAN_WAYPOINTS: THREE.Vector3[] = [
   new THREE.Vector3(-78, 0.0, 50),
 ];
 
+/**
+ * CIRCUITO 4: Spa-Ardennes Forest GP (Inspirado en Spa-Francorchamps, Bélgica).
+ * Horquilla La Source, compresión en el valle y subida mítica Eau Rouge / Raidillon (+16.4 m),
+ * recta Kemmel a máxima velocidad en la cumbre del bosque de las Ardenas, Pouhon y chicane Bus Stop.
+ */
+export const SPA_ARDENNES_WAYPOINTS: THREE.Vector3[] = [
+  // Recta de Salida hacia La Source
+  new THREE.Vector3(-15, 1.2, 46),
+  new THREE.Vector3(42, 1.5, 46),
+  new THREE.Vector3(88, 1.8, 45),
+
+  // T1 — Horquilla cerrada "La Source"
+  new THREE.Vector3(114, 2.0, 36),
+  new THREE.Vector3(112, 1.5, 18),
+  new THREE.Vector3(82, 0.6, 14),
+
+  // Bajada al puente del río Eau Rouge (Compresión a 0.0 m)
+  new THREE.Vector3(44, 0.0, 12),
+
+  // EAU ROUGE & RAIDILLON — Subida vertiginosa Izquierda-Derecha-Izquierda (+16.4 m)
+  new THREE.Vector3(18, 2.4, 4),
+  new THREE.Vector3(-2, 7.8, -14),
+  new THREE.Vector3(-14, 13.6, -34),
+  new THREE.Vector3(-34, 16.2, -52),
+
+  // Gran Recta "Kemmel" en la cima del bosque de pinos
+  new THREE.Vector3(-78, 16.4, -64),
+  new THREE.Vector3(-124, 16.0, -70),
+
+  // Frenada "Les Combes" y "Malmedy"
+  new THREE.Vector3(-144, 14.8, -56),
+  new THREE.Vector3(-134, 13.2, -36),
+  new THREE.Vector3(-110, 11.6, -28),
+
+  // Horquilla en bajada "Bruxelles / Rivage"
+  new THREE.Vector3(-92, 9.8, -42),
+  new THREE.Vector3(-74, 8.2, -52),
+
+  // Doble vértice rápido de alta carga G "Pouhon"
+  new THREE.Vector3(-48, 6.2, -46),
+  new THREE.Vector3(-36, 4.6, -24),
+  new THREE.Vector3(-48, 3.6, -4),
+
+  // "Campus / Stavelot" y aceleración a fondo por "Blanchimont"
+  new THREE.Vector3(-82, 2.8, 6),
+  new THREE.Vector3(-118, 2.2, 20),
+  new THREE.Vector3(-128, 1.8, 38),
+
+  // Chicane final "Bus Stop" hacia línea de meta
+  new THREE.Vector3(-102, 1.5, 48),
+  new THREE.Vector3(-76, 1.3, 41),
+  new THREE.Vector3(-52, 1.2, 46),
+];
+
+/**
+ * CIRCUITO 5: Monaco Harbor GP (Inspirado en el Circuito Urbano de Monte-Carlo).
+ * Sainte-Dévote, subida a Casino Square (+9.2 m), horquilla ultra-lenta Fairmont,
+ * Túnel iluminado junto al Mediterráneo, Nouvelle Chicane y Marina de Yates de lujo.
+ */
+export const MONACO_HARBOR_WAYPOINTS: THREE.Vector3[] = [
+  // Boulevard Albert 1er (Recta Principal junto al puerto)
+  new THREE.Vector3(-24, 0.0, 40),
+  new THREE.Vector3(32, 0.2, 40),
+  new THREE.Vector3(78, 0.5, 40),
+
+  // T1 — "Sainte-Dévote" y subida "Beau Rivage"
+  new THREE.Vector3(102, 1.6, 30),
+  new THREE.Vector3(98, 4.4, 6),
+  new THREE.Vector3(86, 7.4, -18),
+
+  // "Massenet" y "Casino Square" (+9.2 m)
+  new THREE.Vector3(64, 9.2, -36),
+  new THREE.Vector3(38, 8.6, -34),
+
+  // Bajada "Mirabeau" y Horquilla ultra-cerrada "Fairmont Hairpin"
+  new THREE.Vector3(22, 6.4, -20),
+  new THREE.Vector3(8, 4.8, -22),
+  new THREE.Vector3(12, 3.4, -38),
+  new THREE.Vector3(28, 2.0, -48),
+
+  // "Portier" hacia el mar
+  new THREE.Vector3(18, 0.8, -64),
+
+  // TÚNEL DE MÓNACO (Curvón rápido a fondo junto al acantilado marino)
+  new THREE.Vector3(-18, 0.6, -72),
+  new THREE.Vector3(-64, 0.4, -68),
+  new THREE.Vector3(-104, 0.2, -52),
+
+  // Frenada "Nouvelle Chicane" a la salida del túnel
+  new THREE.Vector3(-118, 0.0, -34),
+  new THREE.Vector3(-106, 0.0, -22),
+
+  // "Tabac" y Esses de la Piscina ("Swimming Pool") frente a los Superyates
+  new THREE.Vector3(-82, 0.0, -14),
+  new THREE.Vector3(-68, 0.0, 2),
+  new THREE.Vector3(-86, 0.0, 14),
+
+  // Horquilla del puerto "La Rascasse" y "Anthony Noghès"
+  new THREE.Vector3(-102, 0.0, 28),
+  new THREE.Vector3(-84, 0.0, 40),
+  new THREE.Vector3(-56, 0.0, 40),
+];
+
+/**
+ * CIRCUITO 6: Suzuka Figure-8 Ring (Inspirado en Suzuka International Racing Course, Japón).
+ * Único circuito en forma de 8 real con puente elevado (+8.8 m) que cruza por encima
+ * del paso inferior (0.0 m), Esses técnicas enlazadas, curva Spoon, 130R y Casio Triangle.
+ */
+export const SUZUKA_EIGHT_WAYPOINTS: THREE.Vector3[] = [
+  // Recta Principal en ligera bajada hacia First Curve
+  new THREE.Vector3(-25, 0.4, 44),
+  new THREE.Vector3(38, 0.2, 44),
+  new THREE.Vector3(92, 0.0, 42),
+
+  // T1 & T2 — "First Curve"
+  new THREE.Vector3(124, 0.5, 28),
+  new THREE.Vector3(128, 1.4, 6),
+  new THREE.Vector3(106, 2.2, -6),
+
+  // Las míticas "S-Curves" (Esses técnicas izquierda-derecha-izquierda-derecha)
+  new THREE.Vector3(82, 3.0, 4),
+  new THREE.Vector3(58, 3.8, -12),
+  new THREE.Vector3(36, 4.4, 2),
+  new THREE.Vector3(16, 3.4, -10),
+
+  // PASO INFERIOR DEL 8 ("Underpass" a cota 0.0 m bajo el puente)
+  new THREE.Vector3(0, 0.8, -22),
+  new THREE.Vector3(-16, 0.0, -36),
+  new THREE.Vector3(-34, 0.4, -52),
+
+  // "Degner Curves" y Horquilla cerrada
+  new THREE.Vector3(-64, 1.6, -64),
+  new THREE.Vector3(-96, 2.4, -54),
+  new THREE.Vector3(-118, 3.0, -72),
+
+  // Doble vértice "Spoon Curve" en el extremo oeste
+  new THREE.Vector3(-144, 4.2, -56),
+  new THREE.Vector3(-148, 5.4, -26),
+  new THREE.Vector3(-122, 6.8, -8),
+
+  // Recta de Atrás ascendente hacia el PUENTE DEL 8 ("Crossover Overpass" a +8.8 m sobre (-16, 0, -36))
+  new THREE.Vector3(-72, 8.2, -20),
+  new THREE.Vector3(-16, 8.8, -36), // Cruza exactamente por encima del paso inferior (+8.8 m de gálibo)
+  new THREE.Vector3(24, 7.2, -46),
+
+  // Curvón de máxima velocidad "130R"
+  new THREE.Vector3(48, 4.6, -30),
+  new THREE.Vector3(26, 2.4, 8),
+
+  // Chicane "Casio Triangle" hacia la Recta de Meta
+  new THREE.Vector3(-28, 1.2, 22),
+  new THREE.Vector3(-56, 0.8, 30),
+  new THREE.Vector3(-64, 0.5, 44),
+];
+
 export interface CircuitMetadata {
   readonly id: TrackId;
   readonly name: string;
@@ -202,6 +357,36 @@ export const CIRCUITS: Record<TrackId, CircuitMetadata> = {
     terrainColor: '#070B14',
     gridPrimaryColor: '#0ea5e9',
     gridSecondaryColor: '#1e1b4b',
+  },
+  'spa-ardennes': {
+    id: 'spa-ardennes',
+    name: 'Spa-Ardennes',
+    subtitle: 'Bosque de las Ardenas · Subida Eau Rouge / Raidillon +16.4 m',
+    waypoints: SPA_ARDENNES_WAYPOINTS,
+    goldTargetMs: 20200,
+    terrainColor: '#0D1912',
+    gridPrimaryColor: '#14532d',
+    gridSecondaryColor: '#0f172a',
+  },
+  'monaco-harbor': {
+    id: 'monaco-harbor',
+    name: 'Monaco Harbor',
+    subtitle: 'Puerto y Marina de Yates · Horquilla Fairmont y Túnel Marino',
+    waypoints: MONACO_HARBOR_WAYPOINTS,
+    goldTargetMs: 18800,
+    terrainColor: '#0C1E2E',
+    gridPrimaryColor: '#0284c7',
+    gridSecondaryColor: '#1e293b',
+  },
+  'suzuka-eight': {
+    id: 'suzuka-eight',
+    name: 'Suzuka 8-Ring',
+    subtitle: 'Circuito en 8 con Puente Elevado · Esses Técnicas y 130R',
+    waypoints: SUZUKA_EIGHT_WAYPOINTS,
+    goldTargetMs: 21400,
+    terrainColor: '#131C17',
+    gridPrimaryColor: '#e11d48',
+    gridSecondaryColor: '#1e293b',
   },
 };
 

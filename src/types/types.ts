@@ -5,7 +5,13 @@
  * - Transmisión Secuencial de 6 Velocidades + Tacómetro RPM + 7 Coches Pro de 100k+ vértices desbloqueados al 100%.
  */
 
-export type TrackId = 'montmelo' | 'sierra-seca' | 'neo-wangan';
+export type TrackId =
+  | 'montmelo'
+  | 'sierra-seca'
+  | 'neo-wangan'
+  | 'spa-ardennes'
+  | 'monaco-harbor'
+  | 'suzuka-eight';
 export type LaneId = 'left' | 'right';
 export type CameraMode = 'chase' | 'cockpit' | 'overhead';
 export type EnvironmentStyle = 'realistic' | 'tabletop';
@@ -269,7 +275,7 @@ export interface TelemetryStoreState extends TelemetrySnapshot {
   readonly activeLicenseId: string;
   readonly licenseProgress: Readonly<Record<string, LicenseProgressRecord>>;
   readonly lastLicenseResult: LicenseAttemptSummary | null;
-  readonly championshipRoundIndex: 0 | 1 | 2;
+  readonly championshipRoundIndex: number;
   readonly championshipCompleted: boolean;
   readonly championshipStandings: readonly ChampionshipStandingRow[];
   readonly overVoltTriggerNonce: number;

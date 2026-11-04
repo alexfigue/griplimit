@@ -705,7 +705,7 @@ export function TelemetryUI() {
               {raceMode === 'license-school'
                 ? `🎓 LICENCIA FIA ${activeLicense.code} · ${activeLicense.title} (${activeLicense.subtitle})`
                 : raceMode === 'championship'
-                  ? `🏆 CAMPEONATO FIA · RONDA ${championshipRoundIndex + 1}/3 · ${CIRCUITS[trackId].name} (Parrilla 4 Coches)`
+                  ? `🏆 CAMPEONATO FIA · RONDA ${championshipRoundIndex + 1}/${CHAMPIONSHIP_TRACK_ORDER.length} · ${CIRCUITS[trackId].name} (Parrilla 4 Coches)`
                   : raceMode === 'grand-prix'
                     ? `🏎️ GRAN PREMIO 4 COCHES · ${CIRCUITS[trackId].name} · 3 Vueltas`
                     : raceMode === 'vs-ai'
@@ -827,7 +827,7 @@ export function TelemetryUI() {
               {raceMode === 'championship'
                 ? championshipCompleted
                   ? '🏆 ¡FINAL DEL CAMPEONATO MUNDIAL FIA!'
-                  : `🏆 RONDA ${championshipRoundIndex + 1}/3 COMPLETADA · P${playerRacePosition}`
+                  : `🏆 RONDA ${championshipRoundIndex + 1}/${CHAMPIONSHIP_TRACK_ORDER.length} COMPLETADA · P${playerRacePosition}`
                 : playerRacePosition === 1
                   ? '🏆 ¡VICTORIA EN GRAN PREMIO!'
                   : `🏁 ${playerRacePosition}.ª POSICIÓN FINAL (+${cupRewardGp} GP)`}
@@ -898,11 +898,15 @@ export function TelemetryUI() {
                     onClick={advanceChampionshipRound}
                     className="rounded-xs bg-[#F59E0B] px-4 py-1.5 font-display text-xs font-bold text-slate-950 hover:bg-amber-400"
                   >
-                    Siguiente Ronda (R{championshipRoundIndex + 2}/3:{' '}
+                    Siguiente Ronda (R{championshipRoundIndex + 2}/
+                    {CHAMPIONSHIP_TRACK_ORDER.length}:{' '}
                     {
                       CIRCUITS[
                         CHAMPIONSHIP_TRACK_ORDER[
-                          Math.min(2, championshipRoundIndex + 1)
+                          Math.min(
+                            CHAMPIONSHIP_TRACK_ORDER.length - 1,
+                            championshipRoundIndex + 1
+                          )
                         ]
                       ].name
                     }

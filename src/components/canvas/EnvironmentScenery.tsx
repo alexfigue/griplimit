@@ -148,11 +148,22 @@ function getMinDistToTrackXZ(lut: TrackLUT, x: number, z: number): number {
 }
 
 function sampleElevationNoise(x: number, z: number, trackId: TrackId): number {
-  if (trackId === 'neo-wangan') {
-    // Explanada urbana y bahía de Tokio prácticamente llana bajo los viaductos elevados
+  if (trackId === 'neo-wangan' || trackId === 'monaco-harbor') {
+    // Explanada urbana y bahía/puerto prácticamente llana en la costa y colina suave al norte
+    const coastalHill =
+      trackId === 'monaco-harbor' && z < -20
+        ? Math.min(22, (-z - 20) * 0.25)
+        : 0;
     const urbanPlate =
-      Math.sin(x * 0.015) * Math.cos(z * 0.015) * 1.4 + 0.8;
+      Math.sin(x * 0.015) * Math.cos(z * 0.015) * 1.4 + 0.8 + coastalHill;
     return Math.max(0, urbanPlate);
+  }
+  if (trackId === 'spa-ardennes') {
+    const ardennesValley =
+      Math.sin(x * 0.017 - 0.4) * Math.cos(z * 0.019 + 0.5) * 16.5 +
+      Math.cos(z * 0.015) * 9.5 +
+      11.0;
+    return Math.max(0, ardennesValley);
   }
   if (trackId === 'sierra-seca') {
     const canyon =
@@ -187,18 +198,52 @@ function buildBiomeTerrainGeometry(trackId: TrackId, lut: TrackLUT) {
 
   const isWangan = trackId === 'neo-wangan';
   const isSierra = trackId === 'sierra-seca';
+  const isSpa = trackId === 'spa-ardennes';
+  const isMonaco = trackId === 'monaco-harbor';
 
   const cRunoff = new THREE.Color(
-    isWangan ? '#0B1120' : isSierra ? '#8C6B48' : '#59634F'
+    isWangan
+      ? '#0B1120'
+      : isMonaco
+        ? '#1E293B'
+        : isSierra
+          ? '#8C6B48'
+          : isSpa
+            ? '#2D4231'
+            : '#59634F'
   );
   const cLow = new THREE.Color(
-    isWangan ? '#070B14' : isSierra ? '#6E4226' : '#263F24'
+    isWangan
+      ? '#070B14'
+      : isMonaco
+        ? '#0F2942'
+        : isSierra
+          ? '#6E4226'
+          : isSpa
+            ? '#17301C'
+            : '#263F24'
   );
   const cMid = new THREE.Color(
-    isWangan ? '#0F172A' : isSierra ? '#8F4F2B' : '#35542D'
+    isWangan
+      ? '#0F172A'
+      : isMonaco
+        ? '#334155'
+        : isSierra
+          ? '#8F4F2B'
+          : isSpa
+            ? '#1E3F24'
+            : '#35542D'
   );
   const cPeak = new THREE.Color(
-    isWangan ? '#1E1B4B' : isSierra ? '#5C2E18' : '#4C564A'
+    isWangan
+      ? '#1E1B4B'
+      : isMonaco
+        ? '#475569'
+        : isSierra
+          ? '#5C2E18'
+          : isSpa
+            ? '#2F4838'
+            : '#4C564A'
   );
   const tmpColor = new THREE.Color();
 
@@ -556,6 +601,193 @@ function MontmeloGrandstand() {
 }
 
 /**
+ * Tribuna icónica de Eau Rouge / Raidillon con colores belgas (Negro, Amarillo, Rojo) en Spa-Ardennes.
+ */
+function SpaEauRougeGrandstand() {
+  return (
+    <group position={[18, 0.0, 26]} rotation={[0, -0.45, 0]}>
+      <mesh position={[0, 2.4, 0]} castShadow receiveShadow>
+        <boxGeometry args={[52, 4.8, 11]} />
+        <meshStandardMaterial color="#18181B" roughness={0.85} />
+      </mesh>
+      <mesh position={[0, 5.2, -1]} rotation={[-0.35, 0, 0]} castShadow>
+        <boxGeometry args={[50, 1.1, 11]} />
+        <meshStandardMaterial color="#EAB308" roughness={0.55} />
+      </mesh>
+      <mesh position={[0, 7.1, 1.8]} rotation={[-0.35, 0, 0]} castShadow>
+        <boxGeometry args={[50, 1.1, 6]} />
+        <meshStandardMaterial color="#DC2626" roughness={0.55} />
+      </mesh>
+      <mesh position={[0, 9.9, 0]} rotation={[0.08, 0, 0]} castShadow>
+        <boxGeometry args={[54, 0.45, 14]} />
+        <meshStandardMaterial color="#F8FAFC" metalness={0.25} roughness={0.35} />
+      </mesh>
+    </group>
+  );
+}
+
+/**
+ * Marina Mediterránea 3D de Mónaco: Mar azul reflectante, Superyates de lujo amarrados y Túnel iluminado.
+ */
+function MonacoHarborMarinaAndTunnel() {
+  const yachtOffsets = [
+    [-46, 0, 18, 0.15],
+    [-22, 0, 16, -0.05],
+    [4, 0, 18, 0.08],
+    [-72, 0, 24, 0.3],
+  ] as const;
+
+  return (
+    <group name="monaco-harbor-scenery">
+      {/* Lámina de agua azul del Puerto Hércules y Mar Mediterráneo */}
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[-25, -0.14, 15]}
+        receiveShadow
+      >
+        <planeGeometry args={[175, 58]} />
+        <meshStandardMaterial
+          color="#0284C7"
+          roughness={0.14}
+          metalness={0.78}
+        />
+      </mesh>
+
+      {/* Superyates blancos de 3 cubiertas en la Marina del Puerto */}
+      {yachtOffsets.map(([x, y, z, rotY], idx) => (
+        <group key={idx} position={[x, y, z]} rotation={[0, rotY, 0]}>
+          {/* Casco principal */}
+          <mesh position={[0, 1.1, 0]} castShadow receiveShadow>
+            <boxGeometry args={[16, 2.2, 4.6]} />
+            <meshStandardMaterial
+              color="#F8FAFC"
+              roughness={0.22}
+              metalness={0.18}
+            />
+          </mesh>
+          {/* Cubierta intermedia con cristaleras oscuras */}
+          <mesh position={[-1.2, 2.7, 0]} castShadow>
+            <boxGeometry args={[11, 1.3, 3.8]} />
+            <meshStandardMaterial
+              color="#0F172A"
+              roughness={0.15}
+              metalness={0.85}
+            />
+          </mesh>
+          {/* Flybridge superior y arco de radar */}
+          <mesh position={[-2.0, 3.8, 0]} castShadow>
+            <boxGeometry args={[7.5, 0.9, 3.1]} />
+            <meshStandardMaterial color="#FFFFFF" roughness={0.25} />
+          </mesh>
+          <mesh position={[-4.2, 4.9, 0]}>
+            <boxGeometry args={[0.8, 1.4, 2.2]} />
+            <meshBasicMaterial color="#38BDF8" toneMapped={false} />
+          </mesh>
+        </group>
+      ))}
+
+      {/* TÚNEL DE MÓNACO 3D sobre la curva rápida costera (-18, 0.6, -72) a (-104, 0.2, -52) */}
+      <group position={[-61, 0.3, -64]} rotation={[0, -0.22, 0]}>
+        {/* Techo abovedado de hormigón del túnel */}
+        <mesh position={[0, 5.4, 0]} castShadow receiveShadow>
+          <boxGeometry args={[92, 1.1, 13.5]} />
+          <meshStandardMaterial color="#334155" roughness={0.8} />
+        </mesh>
+        {/* Muro interior de roca/hormigón norte */}
+        <mesh position={[0, 2.6, -6.2]} castShadow receiveShadow>
+          <boxGeometry args={[92, 5.2, 1.2]} />
+          <meshStandardMaterial color="#1E293B" roughness={0.88} />
+        </mesh>
+        {/* Columnas abiertas con vistas al mar en el lado sur */}
+        {[-38, -22, -6, 10, 26, 40].map((cx) => (
+          <mesh key={cx} position={[cx, 2.6, 6.2]} castShadow>
+            <boxGeometry args={[2.2, 5.2, 1.1]} />
+            <meshStandardMaterial color="#475569" roughness={0.75} />
+          </mesh>
+        ))}
+        {/* Tiras longitudinales de luces cálidas de sodio en el techo interior del túnel */}
+        {[-34, -18, -2, 14, 30].map((lx) => (
+          <mesh key={lx} position={[lx, 4.78, 0]}>
+            <boxGeometry args={[8.5, 0.14, 0.65]} />
+            <meshBasicMaterial color="#FBBF24" toneMapped={false} />
+          </mesh>
+        ))}
+      </group>
+    </group>
+  );
+}
+
+/**
+ * Noria Gigante 3D de Suzuka + Pórtico de Hormigón del Puente Figure-8 en (-16, 0, -36).
+ */
+function SuzukaFerrisWheelAndOverpass() {
+  const wheelRef = useRef<THREE.Group>(null);
+
+  useFrame((_, rawDelta) => {
+    if (wheelRef.current) {
+      wheelRef.current.rotation.z += Math.min(rawDelta, 0.05) * 0.14;
+    }
+  });
+
+  return (
+    <group name="suzuka-landmarks">
+      {/* Noria Gigante icónica de Suzuka junto a Casio Triangle */}
+      <group position={[-76, 0, 74]} rotation={[0, 0.35, 0]}>
+        {/* Pilares en A de soporte */}
+        <mesh position={[-6, 14, 2.4]} rotation={[0, 0, -0.22]} castShadow>
+          <cylinderGeometry args={[0.6, 0.9, 30, 8]} />
+          <meshStandardMaterial color="#E2E8F0" metalness={0.5} roughness={0.4} />
+        </mesh>
+        <mesh position={[6, 14, 2.4]} rotation={[0, 0, 0.22]} castShadow>
+          <cylinderGeometry args={[0.6, 0.9, 30, 8]} />
+          <meshStandardMaterial color="#E2E8F0" metalness={0.5} roughness={0.4} />
+        </mesh>
+        {/* Aro giratorio iluminado */}
+        <group ref={wheelRef} position={[0, 27, 0]}>
+          <mesh castShadow>
+            <torusGeometry args={[18, 0.55, 10, 32]} />
+            <meshStandardMaterial
+              color="#F43F5E"
+              emissive="#E11D48"
+              emissiveIntensity={0.45}
+            />
+          </mesh>
+          <mesh>
+            <torusGeometry args={[12, 0.3, 8, 24]} />
+            <meshBasicMaterial color="#38BDF8" toneMapped={false} />
+          </mesh>
+          {[0, 1, 2, 3, 4, 5].map((idx) => (
+            <mesh
+              key={idx}
+              rotation={[0, 0, (idx * Math.PI) / 6]}
+            >
+              <cylinderGeometry args={[0.18, 0.18, 36, 6]} />
+              <meshStandardMaterial color="#CBD5E1" />
+            </mesh>
+          ))}
+        </group>
+      </group>
+
+      {/* Pilares estructurales del Puente Figure-8 Crossover en (-16, 0, -36) */}
+      <group position={[-16, 0, -36]} rotation={[0, 0.68, 0]}>
+        <mesh position={[-9.5, 4.2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[2.2, 8.6, 8.5]} />
+          <meshStandardMaterial color="#475569" roughness={0.8} />
+        </mesh>
+        <mesh position={[9.5, 4.2, 0]} castShadow receiveShadow>
+          <boxGeometry args={[2.2, 8.6, 8.5]} />
+          <meshStandardMaterial color="#475569" roughness={0.8} />
+        </mesh>
+        <mesh position={[0, 8.15, 0]} castShadow receiveShadow>
+          <boxGeometry args={[21.5, 0.7, 9.2]} />
+          <meshStandardMaterial color="#334155" roughness={0.75} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+/**
  * MODO MAQUETA / SALÓN: Mesa gigante de madera de roble con textura procedural de tablones,
  * marco biselado, transformador clásico de Scalextric y cajas Mini-4WD a escala gigante.
  */
@@ -731,7 +963,11 @@ export function EnvironmentScenery() {
       generateInstancedPropTransforms(
         trackId,
         lut,
-        trackId === 'neo-wangan' ? 185 : 210
+        trackId === 'neo-wangan'
+          ? 185
+          : trackId === 'spa-ardennes'
+            ? 245
+            : 210
       ),
     [trackId, lut]
   );
@@ -810,18 +1046,39 @@ export function EnvironmentScenery() {
   }
 
   const isSierra = trackId === 'sierra-seca';
+  const isSpa = trackId === 'spa-ardennes';
+  const isMonaco = trackId === 'monaco-harbor';
+  const isSuzuka = trackId === 'suzuka-eight';
 
   return (
     <>
       <AutomotivePBRReflections isNight={false} />
       <color
         attach="background"
-        args={[isRain ? '#263445' : isSierra ? '#D99B66' : '#8CB8DE']}
+        args={[
+          isRain
+            ? '#263445'
+            : isSierra
+              ? '#D99B66'
+              : isMonaco
+                ? '#72B9E8'
+                : isSpa
+                  ? '#7BA3C4'
+                  : '#8CB8DE',
+        ]}
       />
       <fog
         attach="fog"
         args={[
-          isRain ? '#263445' : isSierra ? '#C98A5B' : '#9EC3E2',
+          isRain
+            ? '#263445'
+            : isSierra
+              ? '#C98A5B'
+              : isMonaco
+                ? '#8CC9F0'
+                : isSpa
+                  ? '#89AFCB'
+                  : '#9EC3E2',
           isRain ? 115 : 170,
           isRain ? 360 : 470,
         ]}
@@ -831,7 +1088,7 @@ export function EnvironmentScenery() {
         <Sky
           distance={4500}
           sunPosition={isSierra ? [-110, 16, -75] : [95, 58, 65]}
-          turbidity={isSierra ? 7.8 : 3.4}
+          turbidity={isSierra ? 7.8 : isSpa ? 4.8 : 3.4}
           rayleigh={isSierra ? 2.3 : 1.15}
           mieCoefficient={0.005}
           mieDirectionalG={0.8}
@@ -874,6 +1131,21 @@ export function EnvironmentScenery() {
 
       {isSierra ? (
         <InstancedDesertCanyonProps transforms={propTransforms} />
+      ) : isMonaco ? (
+        <>
+          <InstancedPineForest transforms={propTransforms} />
+          <MonacoHarborMarinaAndTunnel />
+        </>
+      ) : isSpa ? (
+        <>
+          <InstancedPineForest transforms={propTransforms} />
+          <SpaEauRougeGrandstand />
+        </>
+      ) : isSuzuka ? (
+        <>
+          <InstancedPineForest transforms={propTransforms} />
+          <SuzukaFerrisWheelAndOverpass />
+        </>
       ) : (
         <>
           <InstancedPineForest transforms={propTransforms} />
