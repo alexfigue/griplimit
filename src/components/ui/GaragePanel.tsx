@@ -1,13 +1,21 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import { useGarageStore, useTelemetryStore } from '@/store/store';
+import {
+  CALIPER_COLOR_PRESETS,
+  PAINT_PRESETS,
+  RIM_COLOR_PRESETS,
+  RIM_STYLE_PRESETS,
+  useGarageStore,
+  useTelemetryStore,
+} from '@/store/store';
 import type { CustomAeroArchetype, PartCategory } from '@/types/types';
 
-type GarageTab = PartCategory | 'community';
+type GarageTab = PartCategory | 'visual' | 'community';
 
 const TABS: readonly { id: GarageTab; label: string }[] = [
   { id: 'bodies', label: 'Carrocería' },
+  { id: 'visual', label: '🎨 Pintura y Llantas' },
   { id: 'engines', label: 'Motor' },
   { id: 'tires', label: 'Gomas' },
   { id: 'rollers', label: 'Rodillos' },
@@ -57,6 +65,8 @@ export function GaragePanel() {
   const loadout = useGarageStore((s) => s.loadout);
   const activeParts = useGarageStore((s) => s.activeParts);
   const carStats = useGarageStore((s) => s.carStats);
+  const visualConfig = useGarageStore((s) => s.visualConfig);
+  const updateVisualConfig = useGarageStore((s) => s.updateVisualConfig);
   const gpCredits = useGarageStore((s) => s.gpCredits);
   const unlockedPartIds = useGarageStore((s) => s.unlockedPartIds);
   const sandboxUnlocked = useGarageStore((s) => s.sandboxUnlocked);
@@ -289,6 +299,7 @@ export function GaragePanel() {
             {TABS.map((tab) => {
               const active = activeTab === tab.id;
               const isCommunityTab = tab.id === 'community';
+              const isVisualTab = tab.id === 'visual';
               return (
                 <button
                   key={tab.id}
@@ -298,10 +309,14 @@ export function GaragePanel() {
                     active
                       ? isCommunityTab
                         ? 'bg-cyan-600 text-white'
-                        : 'bg-[#2F81F7] text-white'
+                        : isVisualTab
+                          ? 'bg-amber-500 text-slate-950 font-bold'
+                          : 'bg-[#2F81F7] text-white'
                       : isCommunityTab
                         ? 'border border-cyan-500/40 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20'
-                        : 'bg-[#0D1117]/70 text-slate-400 hover:text-slate-200'
+                        : isVisualTab
+                          ? 'border border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20'
+                          : 'bg-[#0D1117]/70 text-slate-400 hover:text-slate-200'
                   }`}
                 >
                   {tab.label}
@@ -312,6 +327,194 @@ export function GaragePanel() {
 
           {/* Contenido de la categoría seleccionada */}
           <div className="mt-3 space-y-2">
+            {activeTab === 'visual' && (
+              <div className="space-y-3">
+                {/* 1. Selector de Pintura Oficial PBR */}
+                <div className="rounded-xs border border-slate-800 bg-[#0D1117]/85 p-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-display text-xs font-bold text-[#F0F4F8]">
+                      1. Pintura Oficial PBR en Tiempo Real
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateVisualConfig({
+                          paintHex: null,
+                          paintFinish: 'gloss-clearcoat',
+                          rimStyle: 'default',
+                          rimColorHex: null,
+                          caliperColorHex: null,
+                        })
+                      }
+                      className="rounded-xs border border-slate-700 px-2 py-0.5 font-mono text-[10px] text-slate-300 hover:border-amber-400 hover:text-amber-300"
+                    >
+                      ↺ Restaurar OEM
+                    </button>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-1.5">
+                    {PAINT_PRESETS.map((preset) => {
+                      const active = visualConfig.paintHex === preset.hex;
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() =>
+                            updateVisualConfig({ paintHex: preset.hex })
+                          }
+                          className={`flex items-center gap-2 rounded-xs border px-2 py-1.5 text-left text-[11px] transition-colors ${
+                            active
+                              ? 'border-amber-400 bg-amber-500/15 font-bold text-white'
+                              : 'border-slate-800 bg-[#151B24]/70 text-slate-300 hover:border-slate-700'
+                          }`}
+                        >
+                          <span
+                            className="h-3.5 w-3.5 shrink-0 rounded-full border border-white/30 shadow-xs"
+                            style={{ backgroundColor: preset.cssHex }}
+                          />
+                          <span className="truncate">{preset.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Acabado de laca Clearcoat vs Mate */}
+                  <div className="mt-2.5 flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateVisualConfig({ paintFinish: 'gloss-clearcoat' })
+                      }
+                      className={`flex-1 rounded-xs border px-2.5 py-1.5 font-mono text-[11px] font-semibold transition-colors ${
+                        visualConfig.paintFinish === 'gloss-clearcoat'
+                          ? 'border-cyan-400 bg-cyan-500/20 text-cyan-200'
+                          : 'border-slate-800 bg-[#151B24]/70 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      ✨ Lacado Clearcoat
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateVisualConfig({ paintFinish: 'satin-matte' })
+                      }
+                      className={`flex-1 rounded-xs border px-2.5 py-1.5 font-mono text-[11px] font-semibold transition-colors ${
+                        visualConfig.paintFinish === 'satin-matte'
+                          ? 'border-amber-400 bg-amber-500/20 text-amber-200'
+                          : 'border-slate-800 bg-[#151B24]/70 text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      🌑 Satinado / Mate
+                    </button>
+                  </div>
+                </div>
+
+                {/* 2. Selector de Geometría 3D de Llantas Forjadas */}
+                <div className="rounded-xs border border-slate-800 bg-[#0D1117]/85 p-2.5">
+                  <span className="block font-display text-xs font-bold text-[#F0F4F8]">
+                    2. Diseño de Llanta 3D Forjada (6 Geometrías)
+                  </span>
+                  <div className="mt-2 space-y-1.5">
+                    {RIM_STYLE_PRESETS.map((rim) => {
+                      const active = visualConfig.rimStyle === rim.id;
+                      return (
+                        <button
+                          key={rim.id}
+                          type="button"
+                          onClick={() =>
+                            updateVisualConfig({ rimStyle: rim.id })
+                          }
+                          className={`flex w-full items-center justify-between rounded-xs border px-2.5 py-1.5 text-left transition-colors ${
+                            active
+                              ? 'border-[#2F81F7] bg-[#2F81F7]/20 text-white'
+                              : 'border-slate-800 bg-[#151B24]/70 text-slate-300 hover:border-slate-700'
+                          }`}
+                        >
+                          <div>
+                            <span className="block text-xs font-semibold">
+                              {rim.label}
+                            </span>
+                            <span className="block text-[10px] text-slate-400">
+                              {rim.subtitle}
+                            </span>
+                          </div>
+                          {active && (
+                            <span className="rounded-xs bg-[#2F81F7] px-1.5 py-0.5 font-mono text-[10px] font-bold text-white">
+                              Montada
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 3. Acabado Metálico de Llanta y Color de Pinzas Brembo */}
+                <div className="rounded-xs border border-slate-800 bg-[#0D1117]/85 p-2.5">
+                  <span className="block font-display text-xs font-bold text-[#F0F4F8]">
+                    3. Aleación de Llanta & Pinzas Brembo 6 Pistones
+                  </span>
+
+                  <span className="mt-2 block font-mono text-[10px] uppercase text-slate-400">
+                    Acabado Metálico de la Llanta
+                  </span>
+                  <div className="mt-1 grid grid-cols-3 gap-1.5">
+                    {RIM_COLOR_PRESETS.map((rc) => {
+                      const active = visualConfig.rimColorHex === rc.hex;
+                      return (
+                        <button
+                          key={rc.id}
+                          type="button"
+                          onClick={() =>
+                            updateVisualConfig({ rimColorHex: rc.hex })
+                          }
+                          className={`flex items-center gap-1.5 rounded-xs border px-2 py-1 text-left text-[11px] transition-colors ${
+                            active
+                              ? 'border-amber-400 bg-amber-500/15 font-bold text-white'
+                              : 'border-slate-800 bg-[#151B24]/70 text-slate-300 hover:border-slate-700'
+                          }`}
+                        >
+                          <span
+                            className="h-3 w-3 shrink-0 rounded-full border border-white/30"
+                            style={{ backgroundColor: rc.cssHex }}
+                          />
+                          <span className="truncate">{rc.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <span className="mt-2.5 block font-mono text-[10px] uppercase text-slate-400">
+                    Color de Pinza de Freno Brembo
+                  </span>
+                  <div className="mt-1 grid grid-cols-3 gap-1.5">
+                    {CALIPER_COLOR_PRESETS.map((cc) => {
+                      const active = visualConfig.caliperColorHex === cc.hex;
+                      return (
+                        <button
+                          key={cc.id}
+                          type="button"
+                          onClick={() =>
+                            updateVisualConfig({ caliperColorHex: cc.hex })
+                          }
+                          className={`flex items-center gap-1.5 rounded-xs border px-2 py-1 text-left text-[11px] transition-colors ${
+                            active
+                              ? 'border-emerald-400 bg-emerald-500/15 font-bold text-white'
+                              : 'border-slate-800 bg-[#151B24]/70 text-slate-300 hover:border-slate-700'
+                          }`}
+                        >
+                          <span
+                            className="h-3 w-3 shrink-0 rounded-full border border-white/30"
+                            style={{ backgroundColor: cc.cssHex }}
+                          />
+                          <span className="truncate">{cc.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {activeTab === 'bodies' &&
               allBodies.map((body) => {
                 const active = body.id === loadout.bodyId;

@@ -30,6 +30,23 @@ export type LapMedalGrade = 'perfect' | 'drift-master' | 'clean' | 'completed';
 export type LicenseMedalGrade = 'none' | 'bronze' | 'silver' | 'gold';
 export type CustomAeroArchetype = 'balanced' | 'downforce' | 'topspeed';
 export type PartCategory = 'bodies' | 'engines' | 'tires' | 'rollers' | 'chassis';
+export type PaintFinishType = 'gloss-clearcoat' | 'satin-matte';
+export type CustomRimStyleOption =
+  | 'default'
+  | 'split'
+  | 'mesh'
+  | 'turbine'
+  | 'blade'
+  | 'classic'
+  | 'cover';
+
+export interface VisualCustomizationConfig {
+  readonly paintHex: number | null;
+  readonly paintFinish: PaintFinishType;
+  readonly rimStyle: CustomRimStyleOption;
+  readonly rimColorHex: number | null;
+  readonly caliperColorHex: number | null;
+}
 
 export interface LicenseChallengeSpec {
   readonly id: string;
@@ -165,6 +182,7 @@ export interface GarageStoreState {
   readonly loadout: CarLoadout;
   readonly activeParts: ResolvedLoadoutParts;
   readonly carStats: ConsolidatedCarStats;
+  readonly visualConfig: VisualCustomizationConfig;
   readonly gpCredits: number;
   readonly unlockedPartIds: readonly string[];
   readonly sandboxUnlocked: boolean;
@@ -172,6 +190,7 @@ export interface GarageStoreState {
   readonly isHydrated: boolean;
   hydrateGarage: () => Promise<void>;
   setGarageOpen: (open: boolean) => void;
+  updateVisualConfig: (partial: Partial<VisualCustomizationConfig>) => void;
   addGpCredits: (amount: number) => void;
   toggleSandboxUnlocked: () => void;
   selectOrBuyPart: (category: PartCategory, partId: string) => boolean;
@@ -292,7 +311,11 @@ export interface TelemetryStoreState extends TelemetrySnapshot {
     SectorSplitInfo,
   ];
   readonly lastLapSummary: LapEvaluationSummary | null;
+  readonly lastLapSpeedTrace: readonly number[];
+  readonly bestLapSpeedTracesByTrack: Record<TrackId, readonly number[]>;
+  readonly telemetryPanelOpen: boolean;
   updateTelemetry: (partial: Partial<TelemetrySnapshot>) => void;
+  toggleTelemetryPanel: () => void;
   recordSectorSplit: (sectorIndex: 0 | 1 | 2, sectorTimeMs: number) => SectorColor;
   completeEvaluatedLap: (params: {
     lapTimeMs: number;
@@ -301,6 +324,7 @@ export interface TelemetryStoreState extends TelemetrySnapshot {
     driftScoreSec: number;
     purpleSectorsInLap: number;
     goldTargetMs: number;
+    speedTraceKmh?: readonly number[];
   }) => LapEvaluationSummary;
   bumpGhostVersion: () => void;
   setTrackId: (trackId: TrackId) => void;

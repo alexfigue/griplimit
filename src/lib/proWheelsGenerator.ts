@@ -608,6 +608,12 @@ export interface AssembledProWheel {
   spinGroup: THREE.Group;
 }
 
+export interface ProWheelVisualOverride {
+  readonly rimStyle?: ProRimStyle;
+  readonly rimColorHex?: number | null;
+  readonly caliperColorHex?: number | null;
+}
+
 /**
  * Construye una rueda completa de competición 3D para un eje concreto.
  * - `xSign`: `1` para el lado +X del coche (cara exterior hacia +X), `-1` para el lado -X (cara exterior hacia -X).
@@ -618,7 +624,8 @@ export function buildProMotorsportWheel(
   xSign: 1 | -1,
   isGhost: boolean,
   ghostMaterial: THREE.Material,
-  customDiscMaterial?: THREE.MeshStandardMaterial
+  customDiscMaterial?: THREE.MeshStandardMaterial,
+  visualOverride?: ProWheelVisualOverride
 ): AssembledProWheel {
   const rootGroup = new THREE.Group();
   const spinGroup = new THREE.Group();
@@ -633,11 +640,18 @@ export function buildProMotorsportWheel(
     WHEEL_PRESETS_BY_CAR_ID.enduro;
   const isSlick = spec.slick ?? preset.slick ?? false;
 
+  const activeRimStyle: ProRimStyle =
+    visualOverride?.rimStyle ?? preset.rimStyle;
+  const activeRimColorHex: number =
+    visualOverride?.rimColorHex ?? preset.rimColorHex;
+  const activeCaliperColorHex: number =
+    visualOverride?.caliperColorHex ?? preset.caliperColorHex;
+
   // Sub-orientación para que la cara exterior (+X en coordenadas de rueda) apunte siempre hacia fuera del coche
   const sideOrientationY = xSign === 1 ? 0 : Math.PI;
 
   const tyreGeo = getProTyreGeometry(r, w, rimR, isSlick);
-  const rimGeo = getProRimGeometry(preset.rimStyle, r, w, rimR);
+  const rimGeo = getProRimGeometry(activeRimStyle, r, w, rimR);
 
   if (isGhost) {
     const ghostTire = new THREE.Mesh(tyreGeo, ghostMaterial);
@@ -675,7 +689,7 @@ export function buildProMotorsportWheel(
 
   // 3. Llanta forjada cóncava multi-radio con tuercas y buje
   const rimMat = new THREE.MeshPhysicalMaterial({
-    color: preset.rimColorHex,
+    color: activeRimColorHex,
     metalness: preset.rimMetalness,
     roughness: preset.rimRoughness,
     clearcoat: 0.65,
@@ -700,7 +714,7 @@ export function buildProMotorsportWheel(
   // 5. Pinza de freno de 6 pistones (permanece fija en rootGroup sin girar con spinGroup)
   const caliperGeo = getProBrakeCaliperGeometry(r, w, rimR);
   const caliperMat = new THREE.MeshPhysicalMaterial({
-    color: preset.caliperColorHex,
+    color: activeCaliperColorHex,
     metalness: 0.65,
     roughness: 0.22,
     clearcoat: 0.85,

@@ -12,8 +12,10 @@ import type {
   CameraMode,
   CarLoadout,
   ChampionshipStandingRow,
+  ChassisPart,
   CupStartPhase,
   CustomAeroArchetype,
+  CustomRimStyleOption,
   GarageStoreState,
   GridStandingRow,
   LapEvaluationSummary,
@@ -22,6 +24,7 @@ import type {
   LicenseChallengeSpec,
   LicenseMedalGrade,
   LicenseProgressRecord,
+  PaintFinishType,
   PartCategory,
   PartsCatalog,
   RaceMode,
@@ -30,6 +33,7 @@ import type {
   TelemetrySnapshot,
   TelemetryStoreState,
   TrackId,
+  VisualCustomizationConfig,
 } from '@/types/types';
 
 const partsCatalog: PartsCatalog = rawCatalog;
@@ -166,6 +170,74 @@ export const INITIAL_CHAMPIONSHIP_STANDINGS: readonly ChampionshipStandingRow[] 
   { driverId: 'ai-3', name: 'Viktor · Skyline R34', isPlayer: false, points: 0, wins: 0 },
 ];
 
+export const PAINT_PRESETS: ReadonlyArray<{
+  id: string;
+  label: string;
+  hex: number | null;
+  cssHex: string;
+}> = [
+  { id: 'oem', label: 'Original de Fábrica', hex: null, cssHex: '#64748B' },
+  { id: 'rosso-corsa', label: 'Rosso Corsa', hex: 0xd91b2e, cssHex: '#D91B2E' },
+  { id: 'bayside-blue', label: 'Bayside Blue', hex: 0x1d4ed8, cssHex: '#1D4ED8' },
+  { id: 'giallo-modena', label: 'Giallo Modena', hex: 0xeab308, cssHex: '#EAB308' },
+  { id: 'papaya-orange', label: 'Papaya Orange', hex: 0xf97316, cssHex: '#F97316' },
+  { id: 'british-green', label: 'British Racing Green', hex: 0x065f46, cssHex: '#065F46' },
+  { id: 'gulf-cyan', label: 'Liquid Cyan GT', hex: 0x0284c7, cssHex: '#0284C7' },
+  { id: 'championship-white', label: 'Championship White', hex: 0xf1f5f9, cssHex: '#F1F5F9' },
+  { id: 'carbon-stealth', label: 'Carbon Stealth', hex: 0x1e293b, cssHex: '#1E293B' },
+  { id: 'ultraviolet-gt', label: 'Ultraviolet GT3', hex: 0x7c3aed, cssHex: '#7C3AED' },
+];
+
+export const RIM_STYLE_PRESETS: ReadonlyArray<{
+  id: CustomRimStyleOption;
+  label: string;
+  subtitle: string;
+}> = [
+  { id: 'default', label: 'Original OEM', subtitle: 'Llanta de serie del chasis' },
+  { id: 'mesh', label: 'BBS Forged Mesh', subtitle: '10 radios cruzados GT3 Endurance' },
+  { id: 'split', label: 'GT3 Split-Spoke', subtitle: '5 brazos dobles en V con tuerca central' },
+  { id: 'turbine', label: 'Hyper Aero Turbine', subtitle: '10 álabes direccionales ventilados' },
+  { id: 'blade', label: 'Directional Blade', subtitle: '5 aspas aerodinámicas Le Mans' },
+  { id: 'classic', label: 'JDM Forged 6-Spoke', subtitle: '6 radios cóncavos estilo TE37 Time Attack' },
+  { id: 'cover', label: 'F1 Aero Carbon Cover', subtitle: 'Tapacubos lenticular FIA de fibra de carbono' },
+];
+
+export const RIM_COLOR_PRESETS: ReadonlyArray<{
+  id: string;
+  label: string;
+  hex: number | null;
+  cssHex: string;
+}> = [
+  { id: 'oem', label: 'Original', hex: null, cssHex: '#64748B' },
+  { id: 'bbs-gold', label: 'Oro Forjado BBS', hex: 0xd4af37, cssHex: '#D4AF37' },
+  { id: 'forged-silver', label: 'Plata Forjado', hex: 0xdbe4ee, cssHex: '#DBE4EE' },
+  { id: 'volk-bronze', label: 'Bronce Time Attack', hex: 0x926c44, cssHex: '#926C44' },
+  { id: 'gunmetal', label: 'Titanio Gunmetal', hex: 0x475569, cssHex: '#475569' },
+  { id: 'satin-black', label: 'Negro Satinado', hex: 0x1e293b, cssHex: '#1E293B' },
+];
+
+export const CALIPER_COLOR_PRESETS: ReadonlyArray<{
+  id: string;
+  label: string;
+  hex: number | null;
+  cssHex: string;
+}> = [
+  { id: 'oem', label: 'Original', hex: null, cssHex: '#64748B' },
+  { id: 'brembo-red', label: 'Rojo Brembo', hex: 0xef4444, cssHex: '#EF4444' },
+  { id: 'ceramic-gold', label: 'Amarillo Cerámico', hex: 0xfacc15, cssHex: '#FACC15' },
+  { id: 'acid-green', label: 'Verde Acid Hybrid', hex: 0x22c55e, cssHex: '#22C55E' },
+  { id: 'endurance-blue', label: 'Azul Nismo / Ford', hex: 0x0284c7, cssHex: '#0284C7' },
+  { id: 'papaya-caliper', label: 'Naranja McLaren', hex: 0xf97316, cssHex: '#F97316' },
+];
+
+const DEFAULT_VISUAL_CONFIG: VisualCustomizationConfig = {
+  paintHex: null,
+  paintFinish: 'gloss-clearcoat',
+  rimStyle: 'default',
+  rimColorHex: null,
+  caliperColorHex: null,
+};
+
 function computeAllCatalogPartIds(catalog: PartsCatalog): string[] {
   const ids: string[] = [];
   for (const b of catalog.bodies) ids.push(b.id);
@@ -200,6 +272,7 @@ interface PersistedGaragePayload {
   unlockedPartIds: string[];
   sandboxUnlocked: boolean;
   loadout: CarLoadout;
+  visualConfig?: VisualCustomizationConfig;
 }
 
 function savePersistedGarage(payload: PersistedGaragePayload): void {
@@ -224,6 +297,31 @@ function loadPersistedGarage(): PersistedGaragePayload | null {
       ])
     );
 
+    const parsedVis = parsed.visualConfig;
+    const visualConfig: VisualCustomizationConfig = {
+      paintHex:
+        typeof parsedVis?.paintHex === 'number' ? parsedVis.paintHex : null,
+      paintFinish:
+        parsedVis?.paintFinish === 'satin-matte'
+          ? ('satin-matte' as PaintFinishType)
+          : ('gloss-clearcoat' as PaintFinishType),
+      rimStyle:
+        parsedVis?.rimStyle &&
+        ['default', 'mesh', 'split', 'turbine', 'cover', 'classic', 'blade'].includes(
+          parsedVis.rimStyle
+        )
+          ? parsedVis.rimStyle
+          : 'default',
+      rimColorHex:
+        typeof parsedVis?.rimColorHex === 'number'
+          ? parsedVis.rimColorHex
+          : null,
+      caliperColorHex:
+        typeof parsedVis?.caliperColorHex === 'number'
+          ? parsedVis.caliperColorHex
+          : null,
+    };
+
     return {
       gpCredits:
         typeof parsed.gpCredits === 'number' && Number.isFinite(parsed.gpCredits)
@@ -232,6 +330,7 @@ function loadPersistedGarage(): PersistedGaragePayload | null {
       unlockedPartIds: mergedUnlocked,
       sandboxUnlocked: true,
       loadout: parsed.loadout ?? initialLoadout,
+      visualConfig,
     };
   } catch {
     return null;
@@ -250,6 +349,7 @@ export const useGarageStore = create<GarageStoreState>((set, get) => {
         overrides?.unlockedPartIds ?? [...state.unlockedPartIds],
       sandboxUnlocked: true,
       loadout: overrides?.loadout ?? state.loadout,
+      visualConfig: overrides?.visualConfig ?? state.visualConfig,
     });
   };
 
@@ -290,6 +390,7 @@ export const useGarageStore = create<GarageStoreState>((set, get) => {
     loadout: initialLoadout,
     activeParts: initialActiveParts,
     carStats: initialCarStats,
+    visualConfig: DEFAULT_VISUAL_CONFIG,
     gpCredits: INITIAL_GP_CREDITS,
     unlockedPartIds: DEFAULT_UNLOCKED_IDS,
     sandboxUnlocked: true,
@@ -297,6 +398,15 @@ export const useGarageStore = create<GarageStoreState>((set, get) => {
     isHydrated: false,
 
     setGarageOpen: (open: boolean) => set({ isGarageOpen: open }),
+
+    updateVisualConfig: (partial: Partial<VisualCustomizationConfig>) => {
+      const nextVisual: VisualCustomizationConfig = {
+        ...get().visualConfig,
+        ...partial,
+      };
+      set({ visualConfig: nextVisual });
+      persistCurrentGarage({ visualConfig: nextVisual });
+    },
 
     hydrateGarage: async () => {
       if (get().isHydrated) return;
@@ -333,6 +443,7 @@ export const useGarageStore = create<GarageStoreState>((set, get) => {
         loadout: normalizedLoadout,
         activeParts,
         carStats,
+        visualConfig: persisted?.visualConfig ?? DEFAULT_VISUAL_CONFIG,
         isHydrated: true,
       });
     },
@@ -433,10 +544,12 @@ export const useGarageStore = create<GarageStoreState>((set, get) => {
 
 type BestLapsMap = Record<TrackId, number | null>;
 type BestSectorsMap = Record<TrackId, [number | null, number | null, number | null]>;
+type BestSpeedTracesMap = Record<TrackId, readonly number[]>;
 
 interface PersistedRecordsPayload {
   bestLaps: BestLapsMap;
   bestSectors: BestSectorsMap;
+  bestSpeedTraces: BestSpeedTracesMap;
 }
 
 const DEFAULT_BEST_LAPS: BestLapsMap = {
@@ -457,6 +570,15 @@ const DEFAULT_BEST_SECTORS: BestSectorsMap = {
   'suzuka-eight': [null, null, null],
 };
 
+const DEFAULT_BEST_SPEED_TRACES: BestSpeedTracesMap = {
+  montmelo: [],
+  'sierra-seca': [],
+  'neo-wangan': [],
+  'spa-ardennes': [],
+  'monaco-harbor': [],
+  'suzuka-eight': [],
+};
+
 const EMPTY_SECTOR_SPLITS: readonly [
   SectorSplitInfo,
   SectorSplitInfo,
@@ -474,6 +596,7 @@ function loadPersistedRecords(): PersistedRecordsPayload {
     return {
       bestLaps: { ...DEFAULT_BEST_LAPS },
       bestSectors: { ...DEFAULT_BEST_SECTORS },
+      bestSpeedTraces: { ...DEFAULT_BEST_SPEED_TRACES },
     };
   }
 
@@ -490,6 +613,13 @@ function loadPersistedRecords(): PersistedRecordsPayload {
           typeof arr[1] === 'number' ? arr[1] : null,
           typeof arr[2] === 'number' ? arr[2] : null,
         ];
+      };
+
+      const sanitizeTrace = (arr: unknown): readonly number[] => {
+        if (!Array.isArray(arr)) return [];
+        return arr.filter(
+          (v): v is number => typeof v === 'number' && Number.isFinite(v)
+        );
       };
 
       const numOrNull = (val: unknown): number | null =>
@@ -512,6 +642,14 @@ function loadPersistedRecords(): PersistedRecordsPayload {
           'monaco-harbor': sanitizeTuple(parsed.bestSectors?.['monaco-harbor']),
           'suzuka-eight': sanitizeTuple(parsed.bestSectors?.['suzuka-eight']),
         },
+        bestSpeedTraces: {
+          montmelo: sanitizeTrace(parsed.bestSpeedTraces?.montmelo),
+          'sierra-seca': sanitizeTrace(parsed.bestSpeedTraces?.['sierra-seca']),
+          'neo-wangan': sanitizeTrace(parsed.bestSpeedTraces?.['neo-wangan']),
+          'spa-ardennes': sanitizeTrace(parsed.bestSpeedTraces?.['spa-ardennes']),
+          'monaco-harbor': sanitizeTrace(parsed.bestSpeedTraces?.['monaco-harbor']),
+          'suzuka-eight': sanitizeTrace(parsed.bestSpeedTraces?.['suzuka-eight']),
+        },
       };
     }
 
@@ -528,6 +666,7 @@ function loadPersistedRecords(): PersistedRecordsPayload {
               : null,
         },
         bestSectors: { ...DEFAULT_BEST_SECTORS },
+        bestSpeedTraces: { ...DEFAULT_BEST_SPEED_TRACES },
       };
     }
   } catch {
@@ -537,6 +676,7 @@ function loadPersistedRecords(): PersistedRecordsPayload {
   return {
     bestLaps: { ...DEFAULT_BEST_LAPS },
     bestSectors: { ...DEFAULT_BEST_SECTORS },
+    bestSpeedTraces: { ...DEFAULT_BEST_SPEED_TRACES },
   };
 }
 
@@ -657,6 +797,7 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
       return {
         bestLaps: state.bestLapByTrack,
         bestSectors: state.bestSectorsByTrack,
+        bestSpeedTraces: state.bestLapSpeedTracesByTrack,
       };
     }
     const loaded = loadPersistedRecords();
@@ -696,12 +837,18 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
     bestSectorsByTrack: { ...DEFAULT_BEST_SECTORS },
     currentSectors: EMPTY_SECTOR_SPLITS,
     lastLapSummary: null,
+    lastLapSpeedTrace: [],
+    bestLapSpeedTracesByTrack: { ...DEFAULT_BEST_SPEED_TRACES },
+    telemetryPanelOpen: false,
 
     updateTelemetry: (partial) => set(partial),
 
+    toggleTelemetryPanel: () =>
+      set((state) => ({ telemetryPanelOpen: !state.telemetryPanelOpen })),
+
     recordSectorSplit: (sectorIndex: 0 | 1 | 2, sectorTimeMs: number) => {
       const state = get();
-      const { bestLaps, bestSectors } = ensureRecordsLoaded();
+      const { bestLaps, bestSectors, bestSpeedTraces } = ensureRecordsLoaded();
       const trackTuple: [number | null, number | null, number | null] = [
         ...bestSectors[state.trackId],
       ];
@@ -728,6 +875,7 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
         savePersistedRecords({
           bestLaps,
           bestSectors: nextBestSectors,
+          bestSpeedTraces,
         });
       }
 
@@ -753,6 +901,7 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
       set({
         bestLapByTrack: bestLaps,
         bestSectorsByTrack: nextBestSectors,
+        bestLapSpeedTracesByTrack: bestSpeedTraces,
         currentSectors: baseSplits,
       });
 
@@ -766,9 +915,10 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
       driftScoreSec,
       purpleSectorsInLap,
       goldTargetMs,
+      speedTraceKmh,
     }) => {
       const state = get();
-      const { bestLaps, bestSectors } = ensureRecordsLoaded();
+      const { bestLaps, bestSectors, bestSpeedTraces } = ensureRecordsLoaded();
 
       const prevBest = bestLaps[state.trackId];
       const isNewBest = prevBest === null || lapTimeMs < prevBest;
@@ -779,9 +929,23 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
         [state.trackId]: nextBest,
       };
 
+      const cleanTrace =
+        Array.isArray(speedTraceKmh) && speedTraceKmh.length > 0
+          ? [...speedTraceKmh]
+          : state.lastLapSpeedTrace;
+
+      const updatedBestTraces: BestSpeedTracesMap =
+        isNewBest && cleanTrace.length > 0
+          ? {
+              ...bestSpeedTraces,
+              [state.trackId]: cleanTrace,
+            }
+          : bestSpeedTraces;
+
       savePersistedRecords({
         bestLaps: updatedBestLaps,
         bestSectors,
+        bestSpeedTraces: updatedBestTraces,
       });
 
       let medal: LapMedalGrade;
@@ -833,6 +997,8 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
         bestLapTimeMs: nextBest,
         bestLapByTrack: updatedBestLaps,
         bestSectorsByTrack: bestSectors,
+        lastLapSpeedTrace: cleanTrace,
+        bestLapSpeedTracesByTrack: updatedBestTraces,
         lastLapSummary: summary,
       });
 
@@ -845,7 +1011,7 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
       })),
 
     setTrackId: (trackId: TrackId) => {
-      const { bestLaps, bestSectors } = ensureRecordsLoaded();
+      const { bestLaps, bestSectors, bestSpeedTraces } = ensureRecordsLoaded();
 
       set((state) => ({
         trackId,
@@ -862,6 +1028,8 @@ export const useTelemetryStore = create<TelemetryStoreState>((set, get) => {
         bestLapTimeMs: bestLaps[trackId],
         bestLapByTrack: bestLaps,
         bestSectorsByTrack: bestSectors,
+        bestLapSpeedTracesByTrack: bestSpeedTraces,
+        lastLapSpeedTrace: [],
         currentSectors: EMPTY_SECTOR_SPLITS,
         lastLapSummary: null,
         isDerailed: false,

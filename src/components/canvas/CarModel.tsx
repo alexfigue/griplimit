@@ -6,9 +6,11 @@ import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import {
   buildProMotorsportWheel,
+  type ProRimStyle,
   type ProWheelSpec,
 } from '@/lib/proWheelsGenerator';
 import { useTelemetryStore } from '@/store/store';
+import type { VisualCustomizationConfig } from '@/types/types';
 
 export const CAR_GLB_PATH = '/cars/gt3-enduro-pro.glb';
 const TARGET_CAR_LENGTH_M = 4.4;
@@ -71,6 +73,7 @@ export interface CarModelProps {
   modelPath?: string;
   modelYawOffsetRad?: number;
   paintColorOverrideHex?: number;
+  visualConfig?: VisualCustomizationConfig;
   isGhost?: boolean;
   motionRef?: React.RefObject<CarVisualMotionState>;
   isDerailed?: boolean;
@@ -80,6 +83,7 @@ interface LoadedGLBProps {
   modelPath: string;
   yawOffsetRad: number;
   paintColorOverrideHex?: number;
+  visualConfig?: VisualCustomizationConfig;
   isGhost: boolean;
 }
 
@@ -156,6 +160,7 @@ function LoadedCarGLB({
   modelPath,
   yawOffsetRad,
   paintColorOverrideHex,
+  visualConfig,
   isGhost,
 }: LoadedGLBProps) {
   const { scene } = useGLTF(modelPath);
@@ -180,15 +185,18 @@ function LoadedCarGLB({
 
     const basePaintHex =
       paintColorOverrideHex ??
+      visualConfig?.paintHex ??
       CAR_SIGNATURE_PAINT_HEX[modelPath] ??
       0xd91b2e;
 
+    const isMatte = visualConfig?.paintFinish === 'satin-matte';
+
     const paintMaterial = new THREE.MeshPhysicalMaterial({
       color: basePaintHex,
-      metalness: 0.7,
-      roughness: 0.18,
-      clearcoat: 1.0,
-      clearcoatRoughness: 0.06,
+      metalness: isMatte ? 0.52 : 0.72,
+      roughness: isMatte ? 0.44 : 0.16,
+      clearcoat: isMatte ? 0.15 : 1.0,
+      clearcoatRoughness: isMatte ? 0.45 : 0.05,
     });
     const glassMaterial = new THREE.MeshPhysicalMaterial({
       color: '#090E1A',
@@ -294,6 +302,17 @@ function LoadedCarGLB({
         { spec: rear, xSign: -1 },
       ];
 
+      const wheelOverride = visualConfig
+        ? {
+            rimStyle:
+              visualConfig.rimStyle && visualConfig.rimStyle !== 'default'
+                ? (visualConfig.rimStyle as ProRimStyle)
+                : undefined,
+            rimColorHex: visualConfig.rimColorHex ?? undefined,
+            caliperColorHex: visualConfig.caliperColorHex ?? undefined,
+          }
+        : undefined;
+
       for (const p of placements) {
         const { rootGroup, spinGroup } = buildProMotorsportWheel(
           p.spec,
@@ -301,7 +320,8 @@ function LoadedCarGLB({
           p.xSign,
           isGhost,
           GHOST_HOLOGRAM_MATERIAL,
-          discThermalMaterial
+          discThermalMaterial,
+          wheelOverride
         );
         rootGroup.position.set(p.spec.x * p.xSign, p.spec.y, p.spec.z);
         cloned.add(rootGroup);
@@ -422,7 +442,14 @@ function LoadedCarGLB({
     wrapper.userData.headlightBeams = headlightBeams;
     wrapper.userData.spinDirection = Math.cos(yawOffsetRad) >= 0 ? 1 : -1;
     return wrapper;
-  }, [scene, yawOffsetRad, paintColorOverrideHex, isGhost, modelPath]);
+  }, [
+    scene,
+    yawOffsetRad,
+    paintColorOverrideHex,
+    visualConfig,
+    isGhost,
+    modelPath,
+  ]);
 
   return <primitive object={normalizedModel} />;
 }
@@ -490,6 +517,7 @@ export function CarModel({
   modelPath = CAR_GLB_PATH,
   modelYawOffsetRad = 0,
   paintColorOverrideHex,
+  visualConfig,
   isGhost = false,
   motionRef,
   isDerailed = false,
@@ -896,6 +924,7 @@ export function CarModel({
                 modelPath={modelPath}
                 yawOffsetRad={modelYawOffsetRad}
                 paintColorOverrideHex={paintColorOverrideHex}
+                visualConfig={visualConfig}
                 isGhost={isGhost}
               />
             </Suspense>

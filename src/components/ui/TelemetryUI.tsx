@@ -172,8 +172,15 @@ export function TelemetryUI() {
   const currentLapTimeMs = useTelemetryStore((s) => s.currentLapTimeMs);
   const lastLapTimeMs = useTelemetryStore((s) => s.lastLapTimeMs);
   const bestLapTimeMs = useTelemetryStore((s) => s.bestLapTimeMs);
+  const bestSectorsByTrack = useTelemetryStore((s) => s.bestSectorsByTrack);
   const currentSectors = useTelemetryStore((s) => s.currentSectors);
   const lastLapSummary = useTelemetryStore((s) => s.lastLapSummary);
+  const lastLapSpeedTrace = useTelemetryStore((s) => s.lastLapSpeedTrace);
+  const bestLapSpeedTracesByTrack = useTelemetryStore(
+    (s) => s.bestLapSpeedTracesByTrack
+  );
+  const telemetryPanelOpen = useTelemetryStore((s) => s.telemetryPanelOpen);
+  const toggleTelemetryPanel = useTelemetryStore((s) => s.toggleTelemetryPanel);
   const isDerailed = useTelemetryStore((s) => s.isDerailed);
   const lastDerailForce = useTelemetryStore((s) => s.lastDerailForce);
   const throttleInput = useTelemetryStore((s) => s.throttleInput);
@@ -682,6 +689,19 @@ export function TelemetryUI() {
 
             <button
               type="button"
+              onClick={toggleTelemetryPanel}
+              title="Abrir Gráfico de Telemetría Post-Vuelta e Ingeniero de Pista [Tecla T]"
+              className={`rounded-xs border px-2.5 py-1.5 text-xs font-bold transition-colors ${
+                telemetryPanelOpen
+                  ? 'border-cyan-400 bg-cyan-500/25 text-cyan-100'
+                  : 'border-cyan-500/50 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20'
+              }`}
+            >
+              📊 Telemetría [T]
+            </button>
+
+            <button
+              type="button"
               onClick={toggleEnvironmentStyle}
               className={`rounded-xs border px-2.5 py-1.5 text-xs font-medium transition-colors ${
                 environmentStyle === 'tabletop'
@@ -697,8 +717,274 @@ export function TelemetryUI() {
         </div>
       </header>
 
-      {/* ZONA CENTRAL: SEMÁFORO OFICIAL F1 (5 Focos Rojos -> ¡VERDE SALIDA!), Modales de Final de Carrera / Licencias / Campeonato */}
+      {/* ZONA CENTRAL: SEMÁFORO OFICIAL F1 (5 Focos Rojos -> ¡VERDE SALIDA!), Modales de Final de Carrera / Licencias / Campeonato / Telemetría */}
       <div className="mx-auto flex flex-col items-center gap-2">
+        {telemetryPanelOpen && (
+          <div className="pointer-events-auto w-full max-w-2xl rounded-md border-2 border-cyan-400/80 bg-[#0D1117]/97 p-4 text-left shadow-2xl backdrop-blur-md">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+              <div>
+                <span className="font-mono text-[10px] font-bold tracking-wider text-cyan-400 uppercase">
+                  📊 Telemetría FIA & Ingeniero de Pista · {CIRCUITS[trackId].name}
+                </span>
+                <h2 className="font-display text-base font-bold text-[#F0F4F8]">
+                  Comparativa de Curva de Velocidad y Sectores (Última Vuelta vs Récord)
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={toggleTelemetryPanel}
+                className="rounded-xs border border-slate-700 bg-[#151B24] px-2.5 py-1 font-mono text-xs font-bold text-slate-300 hover:border-cyan-400 hover:text-white"
+              >
+                Cerrar [T]
+              </button>
+            </div>
+
+            {/* Gráfico SVG Dual de Velocidad a lo largo de los 32 puntos del circuito */}
+            {(() => {
+              const bestTrace = bestLapSpeedTracesByTrack[trackId] ?? [];
+              const lastTrace = lastLapSpeedTrace ?? [];
+              const hasAnyTrace = bestTrace.length > 0 || lastTrace.length > 0;
+              const chartMaxKmh = Math.max(220, maxSpeedKmh + 15);
+              const w = 560;
+              const h = 150;
+
+              const buildPoints = (trace: readonly number[]) => {
+                if (trace.length === 0) return '';
+                return trace
+                  .map((v, idx) => {
+                    const x = (idx / Math.max(1, trace.length - 1)) * w;
+                    const y = h - Math.min(1, Math.max(0, v / chartMaxKmh)) * (h - 18) - 8;
+                    return `${x.toFixed(1)},${y.toFixed(1)}`;
+                  })
+                  .join(' ');
+              };
+
+              const bestPoints = buildPoints(bestTrace);
+              const lastPoints = buildPoints(lastTrace);
+
+              const lastMax =
+                lastTrace.length > 0 ? Math.max(...lastTrace) : Math.round(speedKmh);
+              const bestMax =
+                bestTrace.length > 0 ? Math.max(...bestTrace) : lastMax;
+
+              return (
+                <div className="mt-3 rounded-xs border border-slate-800 bg-[#151B24]/90 p-3">
+                  <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2 font-mono text-[11px]">
+                    <div className="flex items-center gap-4">
+                      <span className="flex items-center gap-1.5 text-cyan-300 font-semibold">
+                        <span className="inline-block h-2 w-4 rounded-xs bg-cyan-400" />
+                        Última Vuelta{' '}
+                        {lastLapTimeMs !== null
+                          ? `(${formatLapTime(lastLapTimeMs)} · Vmax ${lastMax} km/h)`
+                          : '(Completa 1 vuelta)'}
+                      </span>
+                      <span className="flex items-center gap-1.5 text-amber-300 font-semibold">
+                        <span className="inline-block h-2 w-4 rounded-xs bg-[#F59E0B]" />
+                        Récord Personal{' '}
+                        {bestLapTimeMs !== null
+                          ? `(${formatLapTime(bestLapTimeMs)} · Vmax ${bestMax} km/h)`
+                          : '(--:--.---)'}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-400">
+                      Escala: 0 – {chartMaxKmh} km/h
+                    </span>
+                  </div>
+
+                  <div className="relative">
+                    <svg
+                      viewBox={`0 0 ${w} ${h}`}
+                      className="h-36 w-full overflow-visible rounded-xs border border-slate-800/90 bg-[#090D14]"
+                    >
+                      {/* Líneas horizontales guía de velocidad */}
+                      {[0.25, 0.5, 0.75].map((ratio) => (
+                        <line
+                          key={ratio}
+                          x1={0}
+                          y1={h * ratio}
+                          x2={w}
+                          y2={h * ratio}
+                          stroke="#1E293B"
+                          strokeDasharray="3 3"
+                          strokeWidth={1}
+                        />
+                      ))}
+
+                      {/* Divisiones verticales de Sectores S1 / S2 / S3 */}
+                      <line
+                        x1={w / 3}
+                        y1={0}
+                        x2={w / 3}
+                        y2={h}
+                        stroke="#334155"
+                        strokeDasharray="4 4"
+                        strokeWidth={1.2}
+                      />
+                      <line
+                        x1={(w * 2) / 3}
+                        y1={0}
+                        x2={(w * 2) / 3}
+                        y2={h}
+                        stroke="#334155"
+                        strokeDasharray="4 4"
+                        strokeWidth={1.2}
+                      />
+
+                      <text x={12} y={14} fill="#64748B" fontSize="10" fontFamily="monospace">
+                        SECTOR 1
+                      </text>
+                      <text
+                        x={w / 3 + 12}
+                        y={14}
+                        fill="#64748B"
+                        fontSize="10"
+                        fontFamily="monospace"
+                      >
+                        SECTOR 2
+                      </text>
+                      <text
+                        x={(w * 2) / 3 + 12}
+                        y={14}
+                        fill="#64748B"
+                        fontSize="10"
+                        fontFamily="monospace"
+                      >
+                        SECTOR 3
+                      </text>
+
+                      {/* Traza del Récord Personal (Ámbar/Oro) */}
+                      {bestPoints && (
+                        <polyline
+                          fill="none"
+                          stroke="#F59E0B"
+                          strokeWidth={2.2}
+                          strokeOpacity={0.85}
+                          points={bestPoints}
+                        />
+                      )}
+
+                      {/* Traza de la Última Vuelta (Cian) */}
+                      {lastPoints && (
+                        <polyline
+                          fill="none"
+                          stroke="#22D3EE"
+                          strokeWidth={2.5}
+                          points={lastPoints}
+                        />
+                      )}
+                    </svg>
+
+                    {!hasAnyTrace && (
+                      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                        <span className="rounded-xs bg-[#0D1117]/90 px-3 py-1.5 font-mono text-xs text-slate-300">
+                          Completa una vuelta para registrar la curva de velocidad en los 32 puntos del circuito
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Tabla Comparativa de Sectores S1 / S2 / S3 y Diagnóstico del Ingeniero de Pista */}
+            {(() => {
+              const bestSectors = bestSectorsByTrack[trackId] ?? [null, null, null];
+              const avgTemp =
+                (tireTempsC[0] + tireTempsC[1] + tireTempsC[2] + tireTempsC[3]) / 4;
+
+              // Calcular en qué sector se pierde más tiempo respecto al récord
+              let worstSectorIdx: 0 | 1 | 2 | null = null;
+              let worstDeltaMs = -Infinity;
+              for (const idx of [0, 1, 2] as const) {
+                const cur = currentSectors[idx]?.timeMs;
+                const best = bestSectors[idx];
+                if (cur !== null && best !== null) {
+                  const d = cur - best;
+                  if (d > worstDeltaMs) {
+                    worstDeltaMs = d;
+                    worstSectorIdx = idx;
+                  }
+                }
+              }
+
+              const engineerTip =
+                avgTemp > 104
+                  ? `Tus neumáticos traseros (${tireTempsC[2]}°C / ${tireTempsC[3]}°C) sufren sobrecalentamiento térmico. Modula el gatillo a la salida de las curvas lentas o monta compuesto Medio/Duro en el Garaje.`
+                  : avgTemp < 64
+                    ? `Gomas frías (${Math.round(avgTemp)}°C · Grip ×${tireThermalGripFactor.toFixed(2)}). Apoya con decisión en las curvas enlazadas del Sector 1 para meterlas en la ventana óptima (70°C–95°C).`
+                    : worstSectorIdx !== null && worstDeltaMs > 80
+                      ? `Estás cediendo +${(worstDeltaMs / 1000).toFixed(2)}s en el Sector ${worstSectorIdx + 1} respecto a tu mejor parcial. Toma como referencia los carteles FIA de 150m/100m/50m para clavar la frenada antes del vértice.`
+                      : magnetMode === 'wood-free'
+                        ? `Conducción en modo Sin Imán (Wood) impecable. Aprovecha el +36% de techo de guiñada para rotar el chasis antes del vértice y abrir gas con el coche ya encarado.`
+                        : `Ventana térmica óptima (${Math.round(avgTemp)}°C · Grip ×${tireThermalGripFactor.toFixed(2)}). Usa el cambio de carril [L] en rectas para coger el rebufo (+8% punta) o trazar por el radio exterior en horquillas cerradas.`;
+
+              return (
+                <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                  {(['Sector 1', 'Sector 2', 'Sector 3'] as const).map(
+                    (secTitle, idx) => {
+                      const curMs = currentSectors[idx]?.timeMs ?? null;
+                      const bestMs = bestSectors[idx] ?? null;
+                      const deltaMs =
+                        curMs !== null && bestMs !== null ? curMs - bestMs : null;
+
+                      return (
+                        <div
+                          key={secTitle}
+                          className="rounded-xs border border-slate-800 bg-[#151B24]/85 p-2.5 font-mono text-xs tabular-nums"
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-slate-300">
+                              {secTitle}
+                            </span>
+                            {deltaMs !== null && (
+                              <span
+                                className={`rounded-xs px-1.5 py-0.5 text-[10px] font-bold ${
+                                  deltaMs <= 0
+                                    ? 'bg-purple-500/25 text-purple-200'
+                                    : deltaMs <= 180
+                                      ? 'bg-emerald-500/20 text-emerald-300'
+                                      : 'bg-amber-500/20 text-amber-300'
+                                }`}
+                              >
+                                {deltaMs <= 0 ? '' : '+'}
+                                {(deltaMs / 1000).toFixed(2)}s
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-1 flex items-baseline justify-between">
+                            <span className="text-[10px] text-slate-400">
+                              Actual:
+                            </span>
+                            <span className="font-bold text-[#F0F4F8]">
+                              {formatSectorSeconds(curMs)}
+                            </span>
+                          </div>
+                          <div className="flex items-baseline justify-between">
+                            <span className="text-[10px] text-slate-400">
+                              Récord S{idx + 1}:
+                            </span>
+                            <span className="font-semibold text-[#F59E0B]">
+                              {formatSectorSeconds(bestMs)}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    }
+                  )}
+
+                  {/* Diagnóstico del Ingeniero de Pista */}
+                  <div className="rounded-xs border border-cyan-500/40 bg-cyan-950/25 p-2.5 sm:col-span-3">
+                    <span className="block font-mono text-[10px] font-bold tracking-wider text-cyan-300 uppercase">
+                      🎧 Ingeniero de Pista FIA · Diagnóstico en Tiempo Real
+                    </span>
+                    <p className="mt-1 text-xs text-slate-200">{engineerTip}</p>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
         {(cupStartPhase === 'countdown' || cupStartPhase === 'green') && (
           <div className="rounded-md border-2 border-slate-700 bg-[#0D1117]/95 px-7 py-4 text-center shadow-2xl backdrop-blur-md">
             <span className="font-mono text-[11px] font-bold tracking-wider text-slate-300 uppercase">

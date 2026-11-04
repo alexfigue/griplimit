@@ -92,6 +92,7 @@ interface InternalPhysicsState {
   overVoltTimerSec: number;
   tireTempsC: [number, number, number, number];
   tireThermalGripFactor: number;
+  lapSpeedTraceKmh: number[];
   uiSyncAccumulatorSec: number;
 }
 
@@ -124,6 +125,7 @@ export function PhysicsCar() {
   );
 
   const carStats = useGarageStore((state) => state.carStats);
+  const visualConfig = useGarageStore((state) => state.visualConfig);
   const activeTireId = useGarageStore((state) => state.loadout.tiresId);
   const trackId = useTelemetryStore((state) => state.trackId);
   const playerLane = useTelemetryStore((state) => state.playerLane);
@@ -197,6 +199,7 @@ export function PhysicsCar() {
     overVoltTimerSec: 0,
     tireTempsC: [58, 58, 58, 58],
     tireThermalGripFactor: 0.96,
+    lapSpeedTraceKmh: new Array(32).fill(0),
     uiSyncAccumulatorSec: 0,
   });
 
@@ -248,6 +251,7 @@ export function PhysicsCar() {
       sim.turboStartTimerSec = 0;
       sim.gear = 0;
       sim.engineRpm = 1650;
+      sim.lapSpeedTraceKmh = new Array(32).fill(0);
       ghostBufferRef.current.reset();
       liveLapClock.elapsedMs = 0;
       liveLapClock.active = false;
@@ -593,6 +597,11 @@ export function PhysicsCar() {
 
       if (!isWaitingAtGrid && (sim.speedMs > 0.1 || sim.lapTimeMs > 0)) {
         sim.lapTimeMs += dt * 1000;
+        const traceBin = Math.min(
+          31,
+          Math.max(0, Math.floor((sim.distanceM / trackLengthM) * 32))
+        );
+        sim.lapSpeedTraceKmh[traceBin] = Math.round(sim.speedMs * 3.6);
       }
 
       const nextDistance =
@@ -643,6 +652,7 @@ export function PhysicsCar() {
             driftScoreSec: sim.driftScoreSecInLap,
             purpleSectorsInLap: sim.purpleSectorsInLap,
             goldTargetMs: CIRCUITS[trackId].goldTargetMs,
+            speedTraceKmh: [...sim.lapSpeedTraceKmh],
           });
 
           if (summary.isNewBest) {
@@ -697,6 +707,7 @@ export function PhysicsCar() {
         sim.sectorStage = 0;
         sim.sectorSplitStartMs = 0;
         sim.purpleSectorsInLap = 0;
+        sim.lapSpeedTraceKmh = new Array(32).fill(0);
         ghostBufferRef.current.reset();
         liveLapClock.elapsedMs = 0;
         forceImmediateHudSync = true;
@@ -1349,6 +1360,7 @@ export function PhysicsCar() {
         <CarModel
           modelPath={carStats.modelPath}
           modelYawOffsetRad={carStats.modelYawOffsetRad}
+          visualConfig={visualConfig}
           motionRef={visualMotionRef}
           isDerailed={isDerailedVisual}
         />

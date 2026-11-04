@@ -102,6 +102,9 @@ export function useControls(): React.RefObject<DriverControlInputs> {
         case 'KeyI':
           useTelemetryStore.getState().toggleMagnetMode();
           break;
+        case 'KeyT':
+          useTelemetryStore.getState().toggleTelemetryPanel();
+          break;
       }
     };
 
