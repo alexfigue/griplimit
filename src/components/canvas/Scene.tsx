@@ -19,7 +19,7 @@ export function Scene() {
     <div className="fixed inset-0 h-full w-full bg-[#0D1117]">
       <Canvas
         shadows
-        dpr={[1, 2]}
+        dpr={[1, 1.75]}
         camera={{ position: [42, 8, 42], fov: 50, near: 0.3, far: 1200 }}
         gl={{
           antialias: true,

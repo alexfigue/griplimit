@@ -805,7 +805,7 @@ export function TelemetryUI() {
             <button
               type="button"
               onClick={toggleMagnetMode}
-              className={`rounded-xs border px-2 py-1 font-bold ${
+              className={`hidden rounded-xs border px-2 py-1 font-bold md:inline-block ${
                 magnetMode === 'wood-free'
                   ? 'border-[#F59E0B]/80 bg-[#F59E0B]/20 text-amber-200'
                   : 'border-emerald-400/70 bg-emerald-500/15 text-emerald-200'
@@ -816,7 +816,7 @@ export function TelemetryUI() {
             <button
               type="button"
               onClick={toggleWeatherMode}
-              className={`rounded-xs border px-2 py-1 ${
+              className={`hidden rounded-xs border px-2 py-1 md:inline-block ${
                 weatherMode === 'rain'
                   ? 'border-sky-400/80 bg-sky-500/25 text-sky-100'
                   : 'border-slate-700 bg-[#151B24] text-slate-200'
@@ -849,7 +849,7 @@ export function TelemetryUI() {
             <button
               type="button"
               onClick={togglePlayerLane}
-              className="rounded-xs border border-slate-700 bg-[#151B24] px-2 py-1 text-slate-200"
+              className="hidden rounded-xs border border-slate-700 bg-[#151B24] px-2 py-1 text-slate-200 sm:inline-block"
             >
               Carril {playerLane === 'left' ? 'Izq' : 'Der'} [L]
             </button>
@@ -859,7 +859,7 @@ export function TelemetryUI() {
                 soundEngine.unlock();
                 toggleSound();
               }}
-              className="rounded-xs border border-slate-700 bg-[#151B24] px-2 py-1 text-slate-200"
+              className="hidden rounded-xs border border-slate-700 bg-[#151B24] px-2 py-1 text-slate-200 sm:inline-block"
             >
               {soundEnabled ? '🔊 [M]' : '🔇 [M]'}
             </button>
@@ -1510,50 +1510,131 @@ export function TelemetryUI() {
         ) : null}
       </div>
 
-      {/* ZONA INFERIOR: Pedales táctiles + Cuadro Digital GT3/F1 (Shift Lights LED + Marcha + RPM + Fuerzas G) */}
-      <div className="flex flex-col-reverse items-stretch justify-between gap-4 p-3 sm:flex-row sm:items-end sm:p-5">
-        <div className="pointer-events-auto flex items-center gap-3">
-          <button
-            type="button"
-            onPointerDown={() => setPointerBrake(true)}
-            onPointerUp={() => setPointerBrake(false)}
-            onPointerLeave={() => setPointerBrake(false)}
-            onPointerCancel={() => setPointerBrake(false)}
-            className={`flex h-20 w-28 flex-col items-center justify-center rounded-md border text-sm font-semibold transition-colors active:scale-[0.98] ${
-              brakeInput > 0
-                ? 'border-[#E63946] bg-[#E63946]/25 text-white'
-                : 'border-slate-700/90 bg-[#151B24]/90 text-slate-200 hover:border-slate-500'
-            }`}
-          >
-            <span className="font-display text-base">Frenar</span>
-            <span className="mt-0.5 font-mono text-[11px] text-slate-400">
-              S / ↓
-            </span>
-          </button>
+      {/* ZONA INFERIOR: Pedales táctiles ergonómicos a dos pulgares (Móvil) + Cuadro Digital GT3/F1 (Escritorio) */}
+      <div className="flex flex-col gap-2 p-2.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:flex-row sm:items-end sm:justify-between sm:gap-4 sm:p-5">
+        {/* BARRA DE TELEMETRÍA COMPACTA PARA MÓVIL (< sm): Velocímetro + Marcha + Barra de Grip sin tapar la pista */}
+        <div
+          className={`pointer-events-auto flex items-center justify-between gap-3 rounded-md border bg-[#0D1117]/92 px-3 py-2 backdrop-blur-md sm:hidden ${
+            isDerailed || guideStressRatio > 0.65
+              ? 'border-[#E63946]'
+              : isDrifting
+                ? 'border-[#F59E0B]/80'
+                : 'border-slate-800'
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            <div
+              className={`flex h-9 w-9 flex-col items-center justify-center rounded-xs border font-mono ${
+                isRedline
+                  ? 'border-cyan-400 bg-cyan-500/20 text-cyan-200'
+                  : 'border-slate-700 bg-[#151B24] text-[#F0F4F8]'
+              }`}
+            >
+              <span className="text-[8px] text-slate-400 uppercase">M</span>
+              <span className="text-base leading-none font-bold">
+                {gear === 0 ? 'N' : gear}
+              </span>
+            </div>
+            <div>
+              <div className="flex items-baseline gap-1">
+                <span className="font-mono text-2xl font-bold tabular-nums text-[#F0F4F8]">
+                  {Math.round(speedKmh)}
+                </span>
+                <span className="font-display text-[11px] text-slate-400">
+                  km/h
+                </span>
+              </div>
+              <span className="block font-mono text-[9px] text-slate-400">
+                {engineRpm.toLocaleString('es-ES')} RPM · {lateralG.toFixed(1)}G
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-1 flex-col gap-1">
+            <div className="flex items-center justify-between font-mono text-[10px]">
+              <span className="text-slate-300">{gripStatusLabel}</span>
+              <span className="text-slate-400">
+                Guía {Math.round(guideStressWidth)}%
+              </span>
+            </div>
+            <div className="relative h-2.5 w-full overflow-hidden rounded-xs border border-slate-700/80 bg-[#151B24]">
+              <div
+                className={`h-full transition-[width] duration-75 ${gripBarColor}`}
+                style={{ width: `${clampedGripBarWidth}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* CONTROLES TÁCTILES A DOS PULGARES: Pulgar Izquierdo (Frenar + Cambiar Carril) | Pulgar Derecho (Acelerar) */}
+        <div className="pointer-events-auto flex w-full items-center justify-between gap-2.5 sm:w-auto sm:justify-start sm:gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onContextMenu={(e) => e.preventDefault()}
+              onPointerDown={() => setPointerBrake(true)}
+              onPointerUp={() => setPointerBrake(false)}
+              onPointerLeave={() => setPointerBrake(false)}
+              onPointerCancel={() => setPointerBrake(false)}
+              className={`flex h-20 w-24 sm:w-28 flex-col items-center justify-center rounded-md border text-sm font-semibold transition-colors active:scale-[0.98] ${
+                brakeInput > 0
+                  ? 'border-[#E63946] bg-[#E63946]/30 text-white shadow-[0_0_16px_rgba(230,57,70,0.4)]'
+                  : 'border-slate-700/90 bg-[#151B24]/92 text-slate-200 hover:border-slate-500'
+              }`}
+            >
+              <span className="font-display text-base font-bold">Frenar</span>
+              <span className="mt-0.5 font-mono text-[10px] text-slate-400">
+                S / ↓
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onContextMenu={(e) => e.preventDefault()}
+              onClick={() => {
+                soundEngine.unlock();
+                togglePlayerLane();
+              }}
+              className="flex h-20 w-20 sm:w-24 flex-col items-center justify-center rounded-md border border-slate-700/90 bg-[#151B24]/92 text-xs font-semibold text-slate-200 transition-colors active:scale-[0.98] hover:border-cyan-400"
+            >
+              <span className="font-display text-sm font-bold text-cyan-300">
+                ⇄ Carril
+              </span>
+              <span className="mt-0.5 font-mono text-[11px] font-bold text-white">
+                {playerLane === 'left' ? 'IZQ' : 'DER'}
+              </span>
+              <span className="hidden font-mono text-[9px] text-slate-400 sm:inline">
+                Tecla [L]
+              </span>
+            </button>
+          </div>
 
           <button
             type="button"
+            onContextMenu={(e) => e.preventDefault()}
             onPointerDown={() => setPointerThrottle(true)}
             onPointerUp={() => setPointerThrottle(false)}
             onPointerLeave={() => setPointerThrottle(false)}
             onPointerCancel={() => setPointerThrottle(false)}
-            className={`flex h-20 w-36 flex-col items-center justify-center rounded-md border text-sm font-semibold transition-colors active:scale-[0.98] ${
+            className={`flex h-20 flex-1 sm:w-40 sm:flex-none flex-col items-center justify-center rounded-md border text-sm font-semibold transition-colors active:scale-[0.98] ${
               throttleInput > 0.05
-                ? 'border-[#2F81F7] bg-[#2F81F7]/25 text-white'
-                : 'border-slate-700/90 bg-[#151B24]/90 text-slate-200 hover:border-slate-500'
+                ? 'border-[#2F81F7] bg-[#2F81F7]/30 text-white shadow-[0_0_20px_rgba(47,129,247,0.45)]'
+                : 'border-slate-700/90 bg-[#151B24]/92 text-slate-200 hover:border-slate-500'
             }`}
           >
-            <span className="font-display text-base">Acelerar</span>
-            <span className="mt-0.5 font-mono text-[11px] text-slate-400">
-              W / ↑ / Espacio
+            <span className="font-display text-lg font-black tracking-wide">
+              ACELERAR
+            </span>
+            <span className="mt-0.5 font-mono text-[10px] text-slate-400">
+              Mantén pulsado · W / Espacio
             </span>
           </button>
         </div>
 
-        {/* CUADRO DIGITAL MOTORSPORT GT3 / F1 */}
+        {/* CUADRO DIGITAL MOTORSPORT GT3 / F1 COMPLETO (Escritorio / Tablet >= sm) */}
         <section
           aria-label="Telemetría física en tiempo real"
-          className={`pointer-events-auto w-full sm:w-[475px] rounded-md border bg-[#151B24]/94 p-4 backdrop-blur-md transition-colors ${
+          className={`pointer-events-auto hidden sm:block sm:w-[475px] rounded-md border bg-[#151B24]/94 p-4 backdrop-blur-md transition-colors ${
             isDerailed || guideStressRatio > 0.65
               ? 'border-[#E63946]'
               : isDrifting
