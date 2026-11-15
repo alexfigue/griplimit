@@ -22,44 +22,26 @@ export const MONTMELO_WAYPOINTS: THREE.Vector3[] = [
   new THREE.Vector3(-119, 1.0, 14),
 
   // T3 — "Curva Renault"
-  new THREE.Vector3(-133, 2.0, -4),
-  new THREE.Vector3(-130, 3.1, -28),
-  new THREE.Vector3(-108, 3.9, -46),
-  new THREE.Vector3(-80, 4.0, -48),
+  new THREE.Vector3(-134, 2.0, -6),
+  new THREE.Vector3(-128, 3.1, -34),
+  new THREE.Vector3(-102, 3.9, -52),
 
-  // T4 — "Repsol"
-  new THREE.Vector3(-56, 3.5, -41),
-  new THREE.Vector3(-47, 2.6, -24),
-  new THREE.Vector3(-58, 1.8, -11),
+  // T4 & T5 — "Repsol" y "Seat" (Infield fluido de radio amplio)
+  new THREE.Vector3(-68, 3.5, -48),
+  new THREE.Vector3(-48, 2.2, -24),
+  new THREE.Vector3(-42, 1.4, 4),
+  new THREE.Vector3(-24, 1.8, 12),
+  new THREE.Vector3(-10, 2.8, -8),
 
-  // T5 — "Seat"
-  new THREE.Vector3(-75, 1.0, -4),
-  new THREE.Vector3(-86, 0.4, 8),
-  new THREE.Vector3(-77, 0.3, 19),
-  new THREE.Vector3(-54, 0.6, 19),
+  // T7, T8 & T9 — Subida "Würth" y "Campsa"
+  new THREE.Vector3(-4, 3.9, -34),
+  new THREE.Vector3(18, 4.5, -48),
+  new THREE.Vector3(44, 3.8, -38),
 
-  // T6, T7 & T8 — Subida "Würth"
-  new THREE.Vector3(-30, 1.3, 12),
-  new THREE.Vector3(-17, 2.2, -1),
-  new THREE.Vector3(-16, 3.3, -20),
-  new THREE.Vector3(-8, 4.1, -38),
-
-  // T9 — "Campsa"
-  new THREE.Vector3(11, 4.5, -48),
-  new THREE.Vector3(31, 4.1, -40),
-
-  // Recta de Atrás
-  new THREE.Vector3(47, 2.7, -25),
-  new THREE.Vector3(62, 1.3, -11),
-
-  // T10 & T11 — "La Caixa"
-  new THREE.Vector3(74, 0.6, -6),
-  new THREE.Vector3(84, 0.7, -14),
-  new THREE.Vector3(87, 0.9, -28),
-
-  // T12 — "Banc Sabadell"
-  new THREE.Vector3(101, 1.1, -38),
-  new THREE.Vector3(119, 0.9, -25),
+  // Recta de Atrás y "La Caixa"
+  new THREE.Vector3(70, 2.2, -22),
+  new THREE.Vector3(98, 1.2, -16),
+  new THREE.Vector3(120, 0.8, -6),
 
   // T13 & T14 — "Europcar" y "New Holland"
   new THREE.Vector3(125, 0.5, 0),
@@ -87,28 +69,27 @@ export const SIERRA_SECA_WAYPOINTS: THREE.Vector3[] = [
   new THREE.Vector3(66, 0.5, 4),
 
   // Infield técnico en el valle (T3 y T4)
-  new THREE.Vector3(38, 0.7, 13),
-  new THREE.Vector3(10, 0.9, 11),
-  new THREE.Vector3(-6, 1.4, 2),
-  new THREE.Vector3(-11, 2.3, -9),
+  new THREE.Vector3(36, 0.7, 12),
+  new THREE.Vector3(8, 1.0, 10),
+  new THREE.Vector3(-12, 1.8, -2),
 
   // Curva 5 y Fuerte Subida "Rahal" hacia la cumbre (+14.4 m)
-  new THREE.Vector3(4, 3.6, -18),
-  new THREE.Vector3(36, 6.5, -26),
-  new THREE.Vector3(70, 10.3, -34),
-  new THREE.Vector3(98, 13.0, -48),
+  new THREE.Vector3(-4, 3.4, -20),
+  new THREE.Vector3(30, 6.5, -28),
+  new THREE.Vector3(68, 10.3, -34),
+  new THREE.Vector3(98, 13.0, -46),
 
   // Cresta Ciega en la cima norte
-  new THREE.Vector3(92, 14.2, -64),
-  new THREE.Vector3(64, 14.4, -70),
+  new THREE.Vector3(96, 14.2, -66),
+  new THREE.Vector3(68, 14.4, -74),
 
   // EL SACACORCHOS (The Corkscrew): Izquierda ciega -> Caída libre del 25% -> Derecha al fondo
-  new THREE.Vector3(42, 13.2, -64), // Entrada ciega a izquierdas
-  new THREE.Vector3(31, 9.4, -51),  // Tobogán en picado
-  new THREE.Vector3(14, 5.6, -50),  // Cambio brusco a derechas en compresión
+  new THREE.Vector3(42, 13.2, -66), // Entrada ciega a izquierdas
+  new THREE.Vector3(24, 9.4, -52),  // Tobogán en picado
+  new THREE.Vector3(2, 5.6, -50),   // Cambio fluido a derechas en compresión
 
   // Curva "Rainey" (Bajada rápida de radio amplio)
-  new THREE.Vector3(-18, 3.8, -58),
+  new THREE.Vector3(-28, 3.8, -56),
   new THREE.Vector3(-56, 2.5, -54),
   new THREE.Vector3(-86, 1.6, -36),
 
@@ -163,157 +144,127 @@ export const NEO_WANGAN_WAYPOINTS: THREE.Vector3[] = [
 
 /**
  * CIRCUITO 4: Spa-Ardennes Forest GP (Inspirado en Spa-Francorchamps, Bélgica).
- * Horquilla La Source, compresión en el valle y subida mítica Eau Rouge / Raidillon (+16.4 m),
- * recta Kemmel a máxima velocidad en la cumbre del bosque de las Ardenas, Pouhon y chicane Bus Stop.
+ * Horquilla amplia La Source, compresión en el valle y subida mítica Eau Rouge / Raidillon (+16.4 m),
+ * recta Kemmel a máxima velocidad en la cumbre del bosque de las Ardenas, Pouhon y chicane fluida hacia meta.
  */
 export const SPA_ARDENNES_WAYPOINTS: THREE.Vector3[] = [
   // Recta de Salida hacia La Source
-  new THREE.Vector3(-15, 1.2, 46),
-  new THREE.Vector3(42, 1.5, 46),
-  new THREE.Vector3(88, 1.8, 45),
+  new THREE.Vector3(-20, 1.0, 52),
+  new THREE.Vector3(38, 1.2, 52),
+  new THREE.Vector3(92, 1.5, 50),
 
-  // T1 — Horquilla cerrada "La Source"
-  new THREE.Vector3(114, 2.0, 36),
-  new THREE.Vector3(112, 1.5, 18),
-  new THREE.Vector3(82, 0.6, 14),
+  // T1 — Horquilla amplia "La Source" (radio fluido >= 18 m)
+  new THREE.Vector3(126, 1.8, 38),
+  new THREE.Vector3(132, 1.4, 14),
+  new THREE.Vector3(108, 0.6, -2),
 
   // Bajada al puente del río Eau Rouge (Compresión a 0.0 m)
-  new THREE.Vector3(44, 0.0, 12),
+  new THREE.Vector3(68, 0.0, -6),
 
-  // EAU ROUGE & RAIDILLON — Subida vertiginosa Izquierda-Derecha-Izquierda (+16.4 m)
-  new THREE.Vector3(18, 2.4, 4),
-  new THREE.Vector3(-2, 7.8, -14),
-  new THREE.Vector3(-14, 13.6, -34),
-  new THREE.Vector3(-34, 16.2, -52),
+  // EAU ROUGE & RAIDILLON — Subida fluida en S hacia la cumbre norte (+16.4 m)
+  new THREE.Vector3(34, 3.2, -18),
+  new THREE.Vector3(12, 8.6, -42),
+  new THREE.Vector3(-6, 13.8, -68),
+  new THREE.Vector3(-34, 16.2, -88),
 
   // Gran Recta "Kemmel" en la cima del bosque de pinos
-  new THREE.Vector3(-78, 16.4, -64),
-  new THREE.Vector3(-124, 16.0, -70),
+  new THREE.Vector3(-82, 16.4, -94),
+  new THREE.Vector3(-130, 15.6, -86),
 
-  // Frenada "Les Combes" y "Malmedy"
-  new THREE.Vector3(-144, 14.8, -56),
-  new THREE.Vector3(-134, 13.2, -36),
-  new THREE.Vector3(-110, 11.6, -28),
+  // Enlazada amplia "Les Combes" y "Malmedy"
+  new THREE.Vector3(-156, 13.8, -62),
+  new THREE.Vector3(-158, 11.4, -26),
+  new THREE.Vector3(-144, 8.6, 8),
 
-  // Horquilla en bajada "Bruxelles / Rivage"
-  new THREE.Vector3(-92, 9.8, -42),
-  new THREE.Vector3(-74, 8.2, -52),
-
-  // Doble vértice rápido de alta carga G "Pouhon"
-  new THREE.Vector3(-48, 6.2, -46),
-  new THREE.Vector3(-36, 4.6, -24),
-  new THREE.Vector3(-48, 3.6, -4),
-
-  // "Campus / Stavelot" y aceleración a fondo por "Blanchimont"
-  new THREE.Vector3(-82, 2.8, 6),
-  new THREE.Vector3(-118, 2.2, 20),
-  new THREE.Vector3(-128, 1.8, 38),
-
-  // Chicane final "Bus Stop" hacia línea de meta
-  new THREE.Vector3(-102, 1.5, 48),
-  new THREE.Vector3(-76, 1.3, 41),
-  new THREE.Vector3(-52, 1.2, 46),
+  // Doble vértice rápido de alta carga G "Pouhon" en descenso y curvón "Blanchimont" hacia meta
+  new THREE.Vector3(-118, 5.4, 34),
+  new THREE.Vector3(-82, 2.6, 48),
+  new THREE.Vector3(-52, 1.2, 52),
 ];
 
 /**
  * CIRCUITO 5: Monaco Harbor GP (Inspirado en el Circuito Urbano de Monte-Carlo).
- * Sainte-Dévote, subida a Casino Square (+9.2 m), horquilla ultra-lenta Fairmont,
- * Túnel iluminado junto al Mediterráneo, Nouvelle Chicane y Marina de Yates de lujo.
+ * Sainte-Dévote, subida panorámica a Casino Square (+9.2 m), horquilla Fairmont de radio realista,
+ * Túnel iluminado junto al Mediterráneo y sector fluido de la Piscina frente a los Superyates.
  */
 export const MONACO_HARBOR_WAYPOINTS: THREE.Vector3[] = [
   // Boulevard Albert 1er (Recta Principal junto al puerto)
-  new THREE.Vector3(-24, 0.0, 40),
-  new THREE.Vector3(32, 0.2, 40),
-  new THREE.Vector3(78, 0.5, 40),
+  new THREE.Vector3(-28, 0.0, 46),
+  new THREE.Vector3(32, 0.2, 46),
+  new THREE.Vector3(86, 0.5, 44),
 
   // T1 — "Sainte-Dévote" y subida "Beau Rivage"
-  new THREE.Vector3(102, 1.6, 30),
-  new THREE.Vector3(98, 4.4, 6),
-  new THREE.Vector3(86, 7.4, -18),
+  new THREE.Vector3(122, 1.8, 30),
+  new THREE.Vector3(130, 4.6, 0),
+  new THREE.Vector3(112, 7.6, -30),
 
   // "Massenet" y "Casino Square" (+9.2 m)
-  new THREE.Vector3(64, 9.2, -36),
-  new THREE.Vector3(38, 8.6, -34),
+  new THREE.Vector3(76, 9.2, -52),
+  new THREE.Vector3(36, 8.0, -44),
 
-  // Bajada "Mirabeau" y Horquilla ultra-cerrada "Fairmont Hairpin"
-  new THREE.Vector3(22, 6.4, -20),
-  new THREE.Vector3(8, 4.8, -22),
-  new THREE.Vector3(12, 3.4, -38),
-  new THREE.Vector3(28, 2.0, -48),
+  // Bajada "Mirabeau" y Horquilla amplia "Fairmont Hairpin" hacia el mar
+  new THREE.Vector3(8, 5.6, -28),
+  new THREE.Vector3(-18, 3.4, -38),
+  new THREE.Vector3(-26, 1.6, -64),
 
-  // "Portier" hacia el mar
-  new THREE.Vector3(18, 0.8, -64),
+  // "Portier" y TÚNEL DE MÓNACO (Curvón rápido a fondo junto al acantilado marino)
+  new THREE.Vector3(-56, 0.6, -84),
+  new THREE.Vector3(-102, 0.3, -80),
+  new THREE.Vector3(-136, 0.1, -56),
 
-  // TÚNEL DE MÓNACO (Curvón rápido a fondo junto al acantilado marino)
-  new THREE.Vector3(-18, 0.6, -72),
-  new THREE.Vector3(-64, 0.4, -68),
-  new THREE.Vector3(-104, 0.2, -52),
-
-  // Frenada "Nouvelle Chicane" a la salida del túnel
-  new THREE.Vector3(-118, 0.0, -34),
-  new THREE.Vector3(-106, 0.0, -22),
-
-  // "Tabac" y Esses de la Piscina ("Swimming Pool") frente a los Superyates
-  new THREE.Vector3(-82, 0.0, -14),
-  new THREE.Vector3(-68, 0.0, 2),
-  new THREE.Vector3(-86, 0.0, 14),
-
-  // Horquilla del puerto "La Rascasse" y "Anthony Noghès"
-  new THREE.Vector3(-102, 0.0, 28),
-  new THREE.Vector3(-84, 0.0, 40),
-  new THREE.Vector3(-56, 0.0, 40),
+  // Salida del túnel, Piscina frente a los Superyates y curva "La Rascasse" hacia meta
+  new THREE.Vector3(-144, 0.0, -20),
+  new THREE.Vector3(-130, 0.0, 14),
+  new THREE.Vector3(-102, 0.0, 36),
+  new THREE.Vector3(-68, 0.0, 46),
 ];
 
 /**
  * CIRCUITO 6: Suzuka Figure-8 Ring (Inspirado en Suzuka International Racing Course, Japón).
- * Único circuito en forma de 8 real con puente elevado (+8.8 m) que cruza por encima
- * del paso inferior (0.0 m), Esses técnicas enlazadas, curva Spoon, 130R y Casio Triangle.
+ * Único circuito en forma de 8 real con puente elevado (+9.2 m) que cruza limpiamente a 90°
+ * por encima del paso inferior (0.0 m), Esses fluidas, curva Spoon y 130R sin colisiones de trazado.
  */
 export const SUZUKA_EIGHT_WAYPOINTS: THREE.Vector3[] = [
-  // Recta Principal en ligera bajada hacia First Curve
-  new THREE.Vector3(-25, 0.4, 44),
-  new THREE.Vector3(38, 0.2, 44),
-  new THREE.Vector3(92, 0.0, 42),
+  // Recta Principal hacia First Curve (Sur-Este)
+  new THREE.Vector3(-24, 0.2, 52),
+  new THREE.Vector3(42, 0.1, 52),
+  new THREE.Vector3(102, 0.0, 48),
 
-  // T1 & T2 — "First Curve"
-  new THREE.Vector3(124, 0.5, 28),
-  new THREE.Vector3(128, 1.4, 6),
-  new THREE.Vector3(106, 2.2, -6),
+  // T1 & T2 — "First Curve" amplia a izquierdas
+  new THREE.Vector3(138, 0.8, 28),
+  new THREE.Vector3(142, 1.8, -4),
+  new THREE.Vector3(116, 2.8, -28),
 
-  // Las míticas "S-Curves" (Esses técnicas izquierda-derecha-izquierda-derecha)
-  new THREE.Vector3(82, 3.0, 4),
-  new THREE.Vector3(58, 3.8, -12),
-  new THREE.Vector3(36, 4.4, 2),
-  new THREE.Vector3(16, 3.4, -10),
+  // "S-Curves" fluidas y rápidas en el sector Este
+  new THREE.Vector3(78, 3.0, -24),
+  new THREE.Vector3(46, 2.0, -36),
 
-  // PASO INFERIOR DEL 8 ("Underpass" a cota 0.0 m bajo el puente)
-  new THREE.Vector3(0, 0.8, -22),
-  new THREE.Vector3(-16, 0.0, -36),
-  new THREE.Vector3(-34, 0.4, -52),
+  // PASO INFERIOR DEL 8 ("Underpass" a cota 0.0 m rumbo Noroeste, pasa bajo el puente en (0, 0, -48))
+  new THREE.Vector3(22, 0.6, -43),
+  new THREE.Vector3(0, 0.0, -48),
+  new THREE.Vector3(-26, 0.2, -55),
 
-  // "Degner Curves" y Horquilla cerrada
-  new THREE.Vector3(-64, 1.6, -64),
-  new THREE.Vector3(-96, 2.4, -54),
-  new THREE.Vector3(-118, 3.0, -72),
+  // "Degner" y bucle Norte-Oeste ("Spoon Curve") en ascenso progresivo hacia el puente
+  new THREE.Vector3(-68, 1.4, -72),
+  new THREE.Vector3(-114, 3.0, -78),
+  new THREE.Vector3(-146, 4.8, -56),
+  new THREE.Vector3(-142, 6.8, -20),
+  new THREE.Vector3(-104, 8.2, -8),
 
-  // Doble vértice "Spoon Curve" en el extremo oeste
-  new THREE.Vector3(-144, 4.2, -56),
-  new THREE.Vector3(-148, 5.4, -26),
-  new THREE.Vector3(-122, 6.8, -8),
+  // PUENTE ELEVADO DEL 8 ("Overpass Bridge" a cota +9.2 m rumbo Sureste, cruza sobre (0, 9.2, -48))
+  new THREE.Vector3(-46, 9.0, -28),
+  new THREE.Vector3(0, 9.2, -48),
+  new THREE.Vector3(38, 7.8, -68),
 
-  // Recta de Atrás ascendente hacia el PUENTE DEL 8 ("Crossover Overpass" a +8.8 m sobre (-16, 0, -36))
-  new THREE.Vector3(-72, 8.2, -20),
-  new THREE.Vector3(-16, 8.8, -36), // Cruza exactamente por encima del paso inferior (+8.8 m de gálibo)
-  new THREE.Vector3(24, 7.2, -46),
-
-  // Curvón de máxima velocidad "130R"
-  new THREE.Vector3(48, 4.6, -30),
-  new THREE.Vector3(26, 2.4, 8),
-
-  // Chicane "Casio Triangle" hacia la Recta de Meta
-  new THREE.Vector3(-28, 1.2, 22),
-  new THREE.Vector3(-56, 0.8, 30),
-  new THREE.Vector3(-64, 0.5, 44),
+  // Lazo exterior "130R" amplio y retorno limpio hacia la Recta Principal
+  new THREE.Vector3(32, 5.6, -98),
+  new THREE.Vector3(-12, 3.6, -114),
+  new THREE.Vector3(-76, 2.2, -110),
+  new THREE.Vector3(-136, 1.4, -88),
+  new THREE.Vector3(-166, 0.9, -46),
+  new THREE.Vector3(-154, 0.5, 10),
+  new THREE.Vector3(-116, 0.3, 42),
+  new THREE.Vector3(-70, 0.2, 52),
 ];
 
 export interface CircuitMetadata {
@@ -408,12 +359,35 @@ export function getTrackCurve(trackId: TrackId): THREE.CatmullRomCurve3 {
   if (existing) return existing;
 
   const meta = CIRCUITS[trackId];
-  const curve = new THREE.CatmullRomCurve3(
+  const rawCurve = new THREE.CatmullRomCurve3(
     meta.waypoints,
     true,
     'centripetal',
     0.5
   );
+  rawCurve.arcLengthDivisions = 1600;
+
+  // Remuestreo equidistante + suavizado C2 para garantizar curvas amplias sin pliegues de guardarrail
+  const sampleCount = 88;
+  let pts = rawCurve.getSpacedPoints(sampleCount).slice(0, sampleCount);
+  for (let pass = 0; pass < 7; pass++) {
+    const nextPts: THREE.Vector3[] = [];
+    for (let i = 0; i < sampleCount; i++) {
+      const prev = pts[(i - 1 + sampleCount) % sampleCount];
+      const cur = pts[i];
+      const next = pts[(i + 1) % sampleCount];
+      nextPts.push(
+        new THREE.Vector3(
+          prev.x * 0.25 + cur.x * 0.5 + next.x * 0.25,
+          prev.y * 0.18 + cur.y * 0.64 + next.y * 0.18,
+          prev.z * 0.25 + cur.z * 0.5 + next.z * 0.25
+        )
+      );
+    }
+    pts = nextPts;
+  }
+
+  const curve = new THREE.CatmullRomCurve3(pts, true, 'centripetal', 0.5);
   curve.arcLengthDivisions = 2400;
   curveCache[trackId] = curve;
   return curve;

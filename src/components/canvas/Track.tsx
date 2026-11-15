@@ -303,6 +303,12 @@ function buildDualLaneTrackGeometries(
 
   const tireStackPlacements: TireStackPlacement[] = [];
   const brakingBoards: BrakingBoardPlacement[] = [];
+  const bridgePillars: Array<{
+    position: THREE.Vector3;
+    height: number;
+    topY: number;
+    rotationY: number;
+  }> = [];
 
   const sampleBuffer: SplineKinematicsResult = {
     position: new THREE.Vector3(),
@@ -514,21 +520,56 @@ function buildDualLaneTrackGeometries(
     const vCoord = (i / TRACK_SEGMENTS) * 110;
     asphaltUvs.push(0, vCoord, 1, vCoord);
 
-    const baseGroundY = -0.18;
+    // Tablero estructural 3D de puente/viaducto (espesor constante 0.58 m con cara inferior cerrada y paso inferior libre)
+    const DECK_THICKNESS_M = 0.58;
+    const deckHalfWidth = ASPHALT_HALF_WIDTH + KERB_WIDTH + 0.14;
+    const leftDeck = pos.clone().addScaledVector(rightVec, -deckHalfWidth);
+    const rightDeck = pos.clone().addScaledVector(rightVec, deckHalfWidth);
+
     skirtPositions.push(
-      leftEdge.x,
-      leftEdge.y - 0.02,
-      leftEdge.z,
-      leftEdge.x - rightVec.x * 1.15,
-      baseGroundY,
-      leftEdge.z - rightVec.z * 1.15,
-      rightEdge.x,
-      rightEdge.y - 0.02,
-      rightEdge.z,
-      rightEdge.x + rightVec.x * 1.15,
-      baseGroundY,
-      rightEdge.z + rightVec.z * 1.15
+      leftDeck.x,
+      leftDeck.y,
+      leftDeck.z,
+      leftDeck.x,
+      leftDeck.y - DECK_THICKNESS_M,
+      leftDeck.z,
+      rightDeck.x,
+      rightDeck.y,
+      rightDeck.z,
+      rightDeck.x,
+      rightDeck.y - DECK_THICKNESS_M,
+      rightDeck.z
     );
+
+    if (
+      i < TRACK_SEGMENTS &&
+      i % 24 === 0 &&
+      pos.y - DECK_THICKNESS_M > 1.35
+    ) {
+      let clearBelow = true;
+      for (let j = 0; j < TRACK_SEGMENTS; j += 3) {
+        const segDiff = Math.abs(j - i);
+        if (segDiff < 26 || TRACK_SEGMENTS - segDiff < 26) continue;
+        const otherPos = preSamples[j].pos;
+        const distXZ = Math.hypot(otherPos.x - pos.x, otherPos.z - pos.z);
+        if (distXZ < 14.5) {
+          clearBelow = false;
+          break;
+        }
+      }
+      if (clearBelow) {
+        const topY = pos.y - DECK_THICKNESS_M;
+        const groundY = -0.25;
+        const height = Math.max(0.8, topY - groundY);
+        const angleY = Math.atan2(node.tangent.x, node.tangent.z);
+        bridgePillars.push({
+          position: new THREE.Vector3(pos.x, groundY + height * 0.5, pos.z),
+          height,
+          topY,
+          rotationY: angleY,
+        });
+      }
+    }
 
     for (let laneIdx = 0; laneIdx < LANE_OFFSETS.length; laneIdx++) {
       const laneOffset = LANE_OFFSETS[laneIdx];
@@ -578,7 +619,9 @@ function buildDualLaneTrackGeometries(
 
       const sBase = i * 4;
       const sNext = (i + 1) * 4;
+      // Pared lateral izquierda del tablero
       skirtIndices.push(sBase, sBase + 1, sNext, sBase + 1, sNext + 1, sNext);
+      // Pared lateral derecha del tablero
       skirtIndices.push(
         sBase + 2,
         sNext + 2,
@@ -586,6 +629,15 @@ function buildDualLaneTrackGeometries(
         sBase + 3,
         sNext + 2,
         sNext + 3
+      );
+      // Cara inferior cerrada (intradós del puente) para vista limpia al cruzar por debajo
+      skirtIndices.push(
+        sBase + 1,
+        sBase + 3,
+        sNext + 1,
+        sBase + 3,
+        sNext + 3,
+        sNext + 1
       );
 
       for (let laneIdx = 0; laneIdx < 2; laneIdx++) {
@@ -863,6 +915,7 @@ function buildDualLaneTrackGeometries(
     gravelGeo,
     tireStackPlacements,
     brakingBoards,
+    bridgePillars,
     startPos,
     startAngleY,
   };
@@ -1131,6 +1184,7 @@ export function Track() {
     gravelGeo,
     tireStackPlacements,
     brakingBoards,
+    bridgePillars,
     startPos,
     startAngleY,
   } = useMemo(
@@ -1147,14 +1201,59 @@ export function Track() {
 
   return (
     <group name={`circuit-${trackId}`}>
-      {/* Taludes / muros de hormigón de soporte */}
+      {/* Tablero estructural 3D de puente/viaducto (con paso inferior abierto) */}
       <mesh geometry={skirtGeo} receiveShadow castShadow>
         <meshStandardMaterial
-          color={isWangan ? '#0F172A' : isSierra ? '#2A2118' : '#1E2530'}
-          roughness={isRain ? 0.55 : 0.88}
+          color={isWangan ? '#1E293B' : isSierra ? '#33291F' : '#263040'}
+          roughness={isRain ? 0.5 : 0.78}
+          metalness={0.18}
           side={THREE.DoubleSide}
         />
       </mesh>
+
+      {/* Pilares de hormigón armado y vigas cabezales en tramos elevados / puentes */}
+      {bridgePillars.map((p, idx) => (
+        <group
+          key={`pillar-${idx}`}
+          position={[p.position.x, 0, p.position.z]}
+          rotation={[0, p.rotationY, 0]}
+        >
+          {/* Viga cabezal transversal bajo el tablero del puente */}
+          <mesh position={[0, p.topY - 0.22, 0]} castShadow receiveShadow>
+            <boxGeometry args={[ASPHALT_HALF_WIDTH * 2 + 1.1, 0.44, 1.15]} />
+            <meshStandardMaterial
+              color="#334155"
+              roughness={0.68}
+              metalness={0.22}
+            />
+          </mesh>
+          {/* Pareja de columnas cilíndricas de soporte hasta el suelo */}
+          <mesh
+            position={[-2.15, p.position.y, 0]}
+            castShadow
+            receiveShadow
+          >
+            <cylinderGeometry args={[0.38, 0.46, p.height, 14]} />
+            <meshStandardMaterial
+              color="#475569"
+              roughness={0.72}
+              metalness={0.18}
+            />
+          </mesh>
+          <mesh
+            position={[2.15, p.position.y, 0]}
+            castShadow
+            receiveShadow
+          >
+            <cylinderGeometry args={[0.38, 0.46, p.height, 14]} />
+            <meshStandardMaterial
+              color="#475569"
+              roughness={0.72}
+              metalness={0.18}
+            />
+          </mesh>
+        </group>
+      ))}
 
       {/* Escapatorias exteriores de grava (Gravel Traps) en curvas fuertes */}
       <mesh geometry={gravelGeo} receiveShadow>
